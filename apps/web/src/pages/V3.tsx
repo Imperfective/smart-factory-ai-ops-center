@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useI18n } from '../i18n'
 import { Badge, Button, Card, Chip, Field, IconBtn, Icon, Input, Kpi, Select, Stat, Tip } from '../components/ui'
 import { L as T, clock, fmtDur, reason, type Lang } from '../v3labels'
 import Twin from '../components/Twin'
 
 /** SF AI OS v3 — 생산목표 인지형 AI 운영 센터 (가상 PLC·가상 MQTT 전용). 화면은 아이콘·짧은 이름 위주, 긴 설명은 ⓘ 안에 둔다. */
-type View = 'live' | 'units' | 'log' | 'incidents' | 'transport' | 'results' | 'experiments' | 'verify' | 'setup'
-const VIEWS: View[] = ['live', 'units', 'log', 'incidents', 'transport', 'results', 'experiments', 'verify', 'setup']
+type View = 'live' | 'units' | 'log' | 'incidents' | 'transport' | 'results' | 'evidence' | 'experiments' | 'verify' | 'setup'
+const VIEWS: View[] = ['live', 'units', 'log', 'incidents', 'transport', 'results', 'evidence', 'experiments', 'verify', 'setup']
 const j = (r: Response) => { if (!r.ok) return r.json().then(e => { throw new Error(e.detail ?? r.statusText) }); return r.json() }
 const post = (u: string, b: any) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(j)
 const num = (v: any, d = 0) => (v === null || v === undefined || v === '' || Number.isNaN(+v)) ? '—' : Number(v).toFixed(d)
@@ -40,7 +40,7 @@ export default function V3() {
   const launch = (seed: number) => { setErr(''); setForm((f: any) => ({ ...f, seed })); post('/api/v3/sessions', { ...form, seed, scenario: 'RND', defect_image_ratio: form.defect_image_ratio === '' ? null : +form.defect_image_ratio }).then(s => { setSid(s.id); if (!['live', 'units', 'log', 'incidents', 'transport'].includes(view)) setView('live') }).catch(e => setErr(String(e))) }
   const ctl = (action: string, value?: number) => sid && post(`/api/v3/sessions/${sid}/control`, { action, value }).catch(e => setErr(String(e)))
   const nav: [View, any, string, string][] = [['live', Icon.factory, '실시간', 'Live'], ['units', Icon.camera, '제품 검사', 'Parts'], ['log', Icon.list, '판단 로그', 'Decisions'], ['incidents', Icon.alert, '사건', 'Incidents'],
-    ['transport', Icon.robot, 'AMR 운송', 'Transport'], ['results', Icon.sigma, '누적 결과', 'Results'], ['experiments', Icon.flask, '실험', 'Experiments'], ['verify', Icon.shield, '작동 검증', 'Verify'], ['setup', Icon.gear, '공장 설정', 'Setup']]
+    ['transport', Icon.robot, 'AMR 운송', 'Transport'], ['results', Icon.sigma, '누적 결과', 'Results'], ['evidence', Icon.db, '연구 기록', 'Research record'], ['experiments', Icon.flask, '실험', 'Experiments'], ['verify', Icon.shield, '작동 검증', 'Verify'], ['setup', Icon.gear, '공장 설정', 'Setup']]
   const needsSession = ['live', 'units', 'log', 'incidents', 'transport'].includes(view)
   const st = ov?.status
   const running = st?.state === 'RUNNING'
@@ -87,10 +87,14 @@ export default function V3() {
         {view === 'incidents' && sid && <Incidents sid={sid} K={K} lg={lg} />}
         {view === 'transport' && sid && <Transport sid={sid} K={K} lg={lg} />}
         {view === 'results' && <Results K={K} lg={lg} />}
+        {view === 'evidence' && <Evidence K={K} lg={lg} />}
         {view === 'experiments' && <Experiments K={K} lg={lg} />}
         {view === 'verify' && <Verify sid={sid} K={K} lg={lg} />}
         {view === 'setup' && <Setup K={K} />}
-        {needsSession && !sid && view !== 'log' && <Card><div className="row" style={{ gap: 10, alignItems: 'center', color: 'var(--color-text-secondary)' }}>{Icon.dice}<span>{K('"새 랜덤 운영"을 누르면 시작합니다.', 'Press "New random course" to start.')}</span></div></Card>}
+        {needsSession && !sid && view !== 'log' && <Card><div className="row" style={{ gap: 10, alignItems: 'center', color: 'var(--color-text-secondary)' }}>{Icon.dice}<span>{K('"새 랜덤 운영"을 누르면 시작합니다.', 'Press "New random course" to start.')}</span></div>
+          {view === 'live' && <div className="row caption" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>{Icon.shield}
+            <span>{K('이 화면은 같은 코드로 돌리는 시연입니다. 논문 결과의 근거가 된 실행 기록은 따로 보관되어 있습니다.', 'This view is a demonstration running the same code; the runs behind the published results are kept in the research record.')}</span>
+            <button className="btn btn-secondary icon-btn" onClick={() => setView('evidence')}>{Icon.db}<span>{K('연구 기록 보기', 'Open research record')}</span></button></div>}</Card>}
       </div>
     </div>
   )
@@ -130,6 +134,9 @@ function Live({ ov, sid, K, lg, go }: { ov: any; sid: string | null; K: any; lg:
   const kw = ov.series?.[ov.series.length - 1]?.kw
   const e = ov.energy
   return <>
+    <div className="row caption" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{Icon.shield}
+      <span>{K('이 화면은 같은 코드로 돌리는 시연입니다. 논문 결과의 근거가 된 실행 기록은 따로 보관되어 있습니다.', 'This view is a demonstration running the same code; the runs behind the published results are kept in the research record.')}</span>
+      <button className="btn btn-secondary icon-btn" onClick={() => go('evidence')}>{Icon.db}<span>{K('연구 기록 보기', 'Open research record')}</span></button></div>
     <div className="kpis">
       <Kpi icon={Icon.target} label={K('목표 양품', 'Target')} value={ov.target} />
       <Kpi icon={Icon.box} label={K('현재 양품', 'Good so far')} value={num(ov.good_so_far)} sub={pct(ov.good_so_far / ov.target)} tip={K('카메라·QR로 확인된 양품 수', 'camera/QR-confirmed good parts')} tone="good" />
@@ -570,5 +577,100 @@ function Results({ K, lg }: { K: any; lg: Lang }) {
           <td style={{ fontSize: 11 }} title={r.event_kinds}>{(r.event_kinds || '').split('+').filter(Boolean).map((k: string) => (EVENT_NAME[k] ?? [k, k])[lg === 'ko' ? 0 : 1]).join(', ')}</td>
           <td>{r.target_met ? <span style={{ color: '#15803d' }}>{Icon.check}</span> : <span style={{ color: '#b91c1c' }}>✕</span>} <span className="mono">{num(r.good_end)}/{num(r.target)}</span></td><td className="mono">{num(r.factory_kwh_total, 0)}</td><td><span className="caption">{r.source === 'batch' ? K('일괄', 'batch') : r.source === 'live' ? K('화면 실행', 'live') : r.source}</span></td></tr>)}</tbody></table></div>
     </Card>}
+  </div>
+}
+
+/** 연구 기록 — 논문 결과의 근거가 된 저장 실행(data/results)을 읽기 전용으로 보여 준다. 실험은 연구자 Mac에서 배치로 실행했다. */
+function Evidence({ K, lg }: { K: any; lg: Lang }) {
+  const [d, setD] = useState<any>(null)
+  const [err, setErr] = useState('')
+  const [f, setF] = useState<any>({ experiment: 'confirmatory', arm: '', load: '', value: '', met: '', seed: '', q: '', offset: 0 })
+  const [page, setPage] = useState<any>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  const [ev, setEv] = useState<any[]>([])
+  useEffect(() => { fetch('/api/v3/evidence').then(j).then(setD).catch(e => setErr(String(e))) }, [])
+  useEffect(() => {
+    const p = new URLSearchParams({ ...f, offset: String(f.offset), limit: '50' })
+    fetch(`/api/v3/evidence/runs?${p}`).then(j).then(setPage).catch(e => setErr(String(e)))
+  }, [f])
+  useEffect(() => { if (open) fetch(`/api/v3/evidence/runs/${open}/events`).then(j).then(setEv).catch(() => setEv([])) }, [open])
+  const set = (k: string, v: any) => { setOpen(null); setF((x: any) => ({ ...x, [k]: v, offset: k === 'offset' ? v : 0 })) }
+  const file = (p: string) => <a key={p} className="btn btn-secondary icon-btn" href={`/api/v3/evidence/file/${p}`} download title={p}>{Icon.download}<span className="mono" style={{ fontSize: 11 }}>{p.split('/').pop()}</span></a>
+  if (!d) return <Card><div className="row caption" style={{ gap: 8 }}>{Icon.db}{err ? <span style={{ color: 'var(--color-error)' }}>{err}</span> : K('연구 기록을 불러오는 중…', 'Loading the research record…')}</div></Card>
+  const ex = Object.fromEntries(d.experiments.map((e: any) => [e.key, e]))
+  const usd = (v: any) => v == null ? '—' : `$${(+v).toFixed(3)}`
+  const span = (s: any[]) => s?.[0] ? `${s[0].slice(0, 16)} ~ ${s[1].slice(11, 16)}` : '—'
+  const card = (key: string, icon: any, title: string, rows: [string, any][]) => <Card key={key} icon={icon} title={title}>
+    <table className="table"><tbody>{rows.map(([k, v]) => <tr key={k}><td className="caption">{k}</td><td className="mono">{v}</td></tr>)}</tbody></table>
+    <div className="toolbar" style={{ marginTop: 8, flexWrap: 'wrap' }}>{ex[key].files.map(file)}</div>
+  </Card>
+  const c = ex.confirmatory, s = ex.sensitivity, r = ex.retest, u = ex.two_stage, p = ex.pilot
+  return <div className="flex flex-col gap-4">
+    <Card icon={Icon.shield} title={K('연구 증빙 기록', 'Research record')}>
+      <p style={{ margin: '0 0 8px', lineHeight: 1.6 }}>{K(
+        '논문의 모든 수치는 아래 저장 실행에서 계산했습니다. 실험은 연구자 Mac에서 배치로 실행했고, 이 사이트와 같은 시뮬레이터·판단·안전 게이트 코드를 씁니다. 이 공개 사이트에서 새로 돌린 운영은 저장되지 않으며 기록에 섞이지 않습니다.',
+        'Every number in the article is computed from the stored runs below. The experiments were run as batches on the researcher’s machine with the same simulator, decision and safety-gate code as this site; runs started on this public site are not stored and never enter the record.')}</p>
+      <div className="row caption" style={{ gap: 6, flexWrap: 'wrap' }}><Badge tone="info">{K('읽기 전용', 'read-only')}</Badge><span className="mono">{d.source}/</span>
+        <span>{K('파일 체크섬(sha256 앞 16자리)은 공개 저장소의 data/results/README.md와 같습니다.', 'checksums (first 16 hex of sha256) match data/results/README.md in the public repository.')}</span></div>
+    </Card>
+    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+      {card('confirmatory', Icon.target, K('확증 실험 (무작위 시나리오)', 'Confirmatory experiment'), [
+        [K('실행 기간', 'run'), span(c.span)], [K('교대 / 짝', 'shifts / pairs'), `${c.runs} / ${c.pairs} (${c.scenarios} × 2)`], [K('운영 방식', 'modes'), c.modes.join(' ')],
+        [K('실제 Jev 교대', 'real-Jev shifts'), c.real_jev_runs], [K('Jev 호출 · 비용', 'calls · cost'), `${c.jev_calls.toLocaleString()} · ${usd(c.usd)}`], [K('모델', 'model'), c.models.join(', ')],
+        [K('코드 버전', 'code'), c.code_versions.join(', ')], [K('배치', 'batches'), c.batches.length]])}
+      {card('sensitivity', Icon.gauge, K('민감도 실험 (재고장 확률)', 'Sensitivity experiment'), [
+        [K('실행 기간', 'run'), span(s.span)], [K('조건', 'values'), `${s.values.join(', ')} (${K('0.6은 확증 실험', '0.6 = confirmatory')})`], [K('조건당 짝', 'pairs per value'), s.pairs_per_value],
+        [K('교대 (통계 사용)', 'shifts used'), `${s.runs} (${K('API 오류로 제외·재실행', 'excluded and re-run')} ${s.excluded_flagged})`], [K('실제 Jev 교대', 'real-Jev shifts'), s.real_jev_runs],
+        [K('Jev 호출 · 비용', 'calls · cost'), `${s.jev_calls.toLocaleString()} · ${usd(s.usd)}`], [K('모델', 'model'), s.models.join(', ')], [K('코드 버전', 'code'), s.code_versions.join(', ')]])}
+      {card('retest', Icon.reset, K('재질문 실험 (응답 안정성)', 'Test–retest experiment'), [
+        [K('요청 · 호출', 'requests · calls'), `${r.requests} · ${r.calls}`], [K('오류', 'errors'), r.errors], [K('원래와 같은 조치', 'same action as original'), pct(r.same_action, 1)],
+        [K('반복끼리 같은 조치', 'same action between repeats'), pct(r.between_repeats, 1)], [K('모델', 'model'), r.models.join(', ')]])}
+      {card('two_stage', Icon.camera, K('2단계 부품 검사', 'Two-stage part inspection'), [
+        [K('부품', 'parts'), u.parts?.toLocaleString()], [K('Jev 호출 · 재사용', 'calls · reused'), `${u.jev_calls} · ${u.reused?.toLocaleString()}`], [K('오류', 'errors'), u.errors], [K('모델', 'model'), u.models.join(', ')]])}
+      {card('pilot', Icon.flask, K('예비 실험 (고정 시나리오)', 'Pilot experiment'), [
+        [K('실행', 'run'), (p.created || '').replace('T', ' ').slice(0, 16)], [K('교대', 'shifts'), p.runs], [K('Jev 호출 · 비용', 'calls · cost'), `${p.jev_calls?.toLocaleString()} · ${usd(p.usd)}`],
+        [K('대체 판단', 'fallbacks'), p.fallbacks], [K('코드 버전', 'code'), p.code_versions.join(', ')]])}
+    </div>
+    <Card icon={Icon.list} title={K('실행 기록', 'Run log')} subtitle={K('교대 하나가 한 줄입니다. 확증 실험 행을 누르면 그 교대에서 일어난 무작위 사건과 첫 자동 판단이 보입니다.', 'One shift per row. Click a confirmatory row to see its random events and the first automatic decision after each.')}>
+      <div className="toolbar" style={{ flexWrap: 'wrap', gap: 6 }}>
+        <div className="seg">{[['confirmatory', K('확증', 'confirmatory')], ['sensitivity', K('민감도', 'sensitivity')]].map(([k, t]) => <button key={k} className={f.experiment === k ? 'is-active' : ''} onClick={() => setF({ experiment: k, arm: '', load: '', value: '', met: '', seed: '', q: '', offset: 0 })}>{t}</button>)}</div>
+        <Select style={{ width: 'auto' }} value={f.arm} onChange={e => set('arm', e.target.value)}><option value="">{K('모든 방식', 'all modes')}</option>{['R0', 'R1', 'R2', 'R3', 'R4', 'R5'].map(a => <option key={a} value={a}>{a}</option>)}</Select>
+        <Select style={{ width: 'auto' }} value={f.load} onChange={e => set('load', e.target.value)}><option value="">{K('모든 부하', 'all loads')}</option><option value="medium">{K('보통', 'medium')}</option><option value="high">{K('높음', 'high')}</option></Select>
+        {f.experiment === 'sensitivity' && <Select style={{ width: 'auto' }} value={f.value} onChange={e => set('value', e.target.value)}><option value="">{K('모든 조건', 'all values')}</option>{s.values.map((v: string) => <option key={v} value={v}>{K('재고장 확률', 'repeat-fault p')} {v}</option>)}</Select>}
+        <Select style={{ width: 'auto' }} value={f.met} onChange={e => set('met', e.target.value)}><option value="">{K('계획 달성 전체', 'plan met: all')}</option><option value="1">{K('달성', 'met')}</option><option value="0">{K('미달', 'missed')}</option></Select>
+        <Input style={{ width: 120 }} placeholder={K('시나리오 번호', 'scenario no.')} value={f.seed} onChange={e => set('seed', e.target.value)} />
+        <Input style={{ width: 170 }} placeholder={K('실행 ID·사건 검색', 'run id / event')} value={f.q} onChange={e => set('q', e.target.value)} />
+        <span className="grow" /><span className="caption">{page ? `${page.total.toLocaleString()} ${K('교대', 'shifts')}` : ''}</span>
+      </div>
+      {page && <div style={{ overflowX: 'auto' }}><table className="table nowrap"><thead><tr>
+        <th>{K('실행 ID', 'run id')}</th><th>{K('완료 시각', 'finished')}</th><th>{K('시나리오', 'scenario')}</th><th>{K('부하', 'load')}</th><th>{K('방식', 'mode')}</th>{f.experiment === 'sensitivity' && <th>{K('재고장 p', 'repeat p')}</th>}
+        <th>{K('판단', 'decisions by')}</th><th>{K('사건', 'events')}</th><th>{K('계획', 'plan')}</th><th>{K('양품/목표', 'good/target')}</th><th>{K('위험 명령', 'unsafe')}</th><th>kWh/{K('양품', 'good')}</th><th>{K('Jev 호출', 'calls')}</th><th>USD</th><th>{K('품질', 'quality')}</th><th>{K('코드', 'code')}</th>
+      </tr></thead><tbody>{page.rows.map((x: any) => <Fragment key={x.run_uid}>
+        <tr key={x.run_uid} onClick={() => f.experiment === 'confirmatory' && setOpen(open === x.run_uid ? null : x.run_uid)} style={{ cursor: f.experiment === 'confirmatory' ? 'pointer' : 'default', background: open === x.run_uid ? 'var(--color-primary-50)' : undefined }}>
+          <td className="mono" style={{ fontSize: 11 }}>{x.run_uid}</td><td className="mono" style={{ fontSize: 11 }}>{(x.finished_at || '').slice(5, 16)}</td><td className="mono">{String(x.course_seed).split('.')[0]}</td><td>{x.load === 'high' ? K('높음', 'high') : K('보통', 'medium')}</td>
+          <td><b>{x.arm}</b></td>{f.experiment === 'sensitivity' && <td className="mono">{x.value}</td>}
+          <td>{x.decision_provider === 'TYPESAFE_JEV' ? <Badge tone="success">{x.jev_model || 'Jev'}</Badge> : <Badge>{K('규칙·계획기', 'rules/planner')}</Badge>}</td>
+          <td style={{ fontSize: 11 }} title={x.event_kinds}>{(x.event_kinds || '').split('+').filter(Boolean).map((k: string) => (EVENT_NAME[k] ?? [k, k])[lg === 'ko' ? 0 : 1]).join(', ')}</td>
+          <td>{+x.target_met ? <span style={{ color: '#15803d' }}>{Icon.check}</span> : <span style={{ color: '#b91c1c' }}>✕</span>}</td>
+          <td className="mono">{num(x.good_end)}/{num(x.target)}</td><td className="mono">{num(x.forbidden_allowed)}</td><td className="mono">{num(x.kwh_per_good, 3)}</td><td className="mono">{num(x.jev_calls)}</td><td className="mono">{x.jev_cost_usd ? (+x.jev_cost_usd).toFixed(4) : '—'}</td>
+          <td>{x.data_quality === 'ok' ? <Badge tone="success">ok</Badge> : <Badge tone="warning" >{K('제외', 'excluded')}</Badge>}</td><td className="mono" style={{ fontSize: 11 }}>{x.code_version}</td>
+        </tr>
+        {open === x.run_uid && <tr key={x.run_uid + '-ev'}><td colSpan={15} style={{ background: 'var(--color-primary-50)' }}>
+          <table className="table"><thead><tr><th>{K('사건', 'event')}</th><th>{K('시작', 'start')}</th><th>{K('기간', 'duration')}</th><th>{K('탐지', 'detected')}</th><th>{K('탐지 지연', 'detection delay')}</th><th>{K('첫 자동 판단', 'first automatic decision')}</th><th>{K('판단 주체', 'by')}</th><th>{K('판단까지', 'after')}</th></tr></thead>
+            <tbody>{ev.map((e: any, i: number) => <tr key={i}><td>{(EVENT_NAME[e.kind] ?? [e.kind, e.kind])[lg === 'ko' ? 0 : 1]}</td><td className="mono">{clock(+e.at_s)}</td><td className="mono">{+e.duration_s > 0 ? fmtDur(+e.duration_s, lg) : '—'}</td>
+              <td>{+e.detected ? <span style={{ color: '#15803d' }}>{Icon.check}</span> : '—'}</td><td className="mono">{e.detect_delay_s !== '' && e.detect_delay_s != null ? `${num(e.detect_delay_s)} s` : '—'}</td><td>{e.first_action ? T.action(e.first_action, lg) : '—'}</td><td>{e.first_action_by || '—'}</td><td className="mono">{e.first_action_delay_s !== '' && e.first_action_delay_s != null ? `${num(e.first_action_delay_s)} s` : '—'}</td></tr>)}</tbody></table>
+        </td></tr>}
+      </Fragment>)}</tbody></table></div>}
+      {page && page.total > 50 && <div className="toolbar" style={{ justifyContent: 'center' }}>
+        <Button size="sm" disabled={f.offset === 0} onClick={() => set('offset', Math.max(0, f.offset - 50))}>{K('이전', 'prev')}</Button>
+        <span className="caption mono">{f.offset + 1}–{Math.min(page.total, f.offset + 50)} / {page.total.toLocaleString()}</span>
+        <Button size="sm" disabled={f.offset + 50 >= page.total} onClick={() => set('offset', f.offset + 50)}>{K('다음', 'next')}</Button>
+      </div>}
+    </Card>
+    <Card icon={Icon.download} title={K('원자료 파일', 'Data files')} subtitle={K('논문 표·그림의 근거가 되는 파일입니다. 내려받아 직접 다시 계산할 수 있습니다.', 'The files behind the tables and figures; download them to recompute.')}>
+      <div style={{ overflowX: 'auto' }}><table className="table"><thead><tr><th>{K('파일', 'file')}</th><th>{K('내용', 'content')}</th><th>{K('크기', 'size')}</th><th>sha256 (16)</th><th /></tr></thead>
+        <tbody>{d.files.map((x: any) => <tr key={x.path}><td className="mono" style={{ fontSize: 11 }}>{x.path}</td><td style={{ fontSize: 12 }}>{x.description}</td><td className="mono">{(x.bytes / 1024).toFixed(0)} KB</td><td className="mono" style={{ fontSize: 11 }}>{x.sha256_16}</td>
+          <td><a className="btn btn-secondary icon-btn" href={`/api/v3/evidence/file/${x.path}`} download title={K('내려받기', 'download')}>{Icon.download}</a></td></tr>)}</tbody></table></div>
+    </Card>
   </div>
 }

@@ -400,6 +400,37 @@ def results_csv(name: str):
     return FileResponse(p, media_type="text/csv", filename=name)
 
 
+# ------------------------------------------------------------------------------------------------ research record (data/results, read-only)
+from sfaic2.v3 import evidence  # noqa: E402
+
+
+@router.get("/evidence")
+def evidence_summary():
+    return evidence.summary()
+
+
+@router.get("/evidence/runs")
+def evidence_runs(experiment: str = "confirmatory", arm: str = "", load: str = "", seed: str = "", value: str = "", met: str = "", q: str = "",
+                  offset: int = 0, limit: int = 50):
+    if experiment not in ("confirmatory", "sensitivity"):
+        raise HTTPException(404, "unknown experiment")
+    return evidence.runs(experiment, arm, load, seed, value, met, q, max(0, offset), limit)
+
+
+@router.get("/evidence/runs/{run_uid}/events")
+def evidence_events(run_uid: str):
+    return evidence.events(run_uid)
+
+
+@router.get("/evidence/file/{rel:path}")
+def evidence_file(rel: str):
+    p = evidence.file_path(rel)
+    if p is None:
+        raise HTTPException(404, "unknown file")
+    media = {".csv": "text/csv", ".json": "application/json", ".jsonl": "application/x-ndjson", ".md": "text/markdown"}.get(p.suffix, "application/octet-stream")
+    return FileResponse(p, media_type=media, filename=p.name)
+
+
 class Batch(BaseModel):
     n: int = 10
     arms: list[str] = ["R0", "R1", "R2", "R3", "R4", "R5"]

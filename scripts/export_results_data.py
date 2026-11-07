@@ -51,6 +51,21 @@ def sensitivity_runs_csv(dst: Path) -> int:
     return len(rows)
 
 
+def retest_csv(dst: Path) -> int:
+    """Flatten results/v3/supplement/retest.jsonl: one row per repeated call (request texts are not exported)."""
+    rows = [json.loads(x) for x in (ROOT / "results/v3/supplement/retest.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    cols = ["request_hash", "repeat", "arm", "repeat_fault_p", "allowed_actions", "latency_ms", "model", "error", "original_action", "repeat_action", "same_action",
+            "original_cause", "repeat_cause", "original_needs_person_p", "repeat_needs_person_p"]
+    with open(dst, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.writer(fh)
+        w.writerow(cols)
+        for r in rows:
+            o = r["orig"]
+            w.writerow([r["hash"], r["rep"], r["arm"], r["value"], r["n_allowed"], r["latency_ms"], r.get("model"), r.get("error"), o.get("action"), r.get("action"),
+                        int(r.get("action") == o.get("action")) if not r.get("error") else None, o.get("cause"), r.get("cause"), o.get("needs_operator_p"), r.get("needs_operator_p")])
+    return len(rows)
+
+
 def main() -> None:
     missing = [s for s in FILES if not (ROOT / s).exists()]
     if missing:
@@ -65,6 +80,8 @@ def main() -> None:
         lines.append((name, what))
     n = sensitivity_runs_csv(DST / "supplement" / "sensitivity_runs.csv")
     lines.append(("supplement/sensitivity_runs.csv", f"{n} shifts of the sensitivity experiment (repeat-fault probability 0.0 / 0.3)"))
+    n = retest_csv(DST / "supplement" / "retest.csv")
+    lines.append(("supplement/retest.csv", f"{n} repeated calls of the test-retest experiment: original vs repeated action, cause and needs-a-person probability (request texts not exported)"))
     for name, _ in lines:                                   # nothing secret may leave results/
         txt = (DST / name).read_text(encoding="utf-8-sig", errors="ignore")
         assert "apikey_" not in txt and "Bearer " not in txt, name

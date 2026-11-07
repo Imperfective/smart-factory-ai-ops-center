@@ -45,6 +45,13 @@ set to 0.0 / 0.3 / 0.6, the R4 − R1 plan-completion gain was +0.033 (n.s.) / +
 reductions in unsafe commands and kWh per good part held at every value. Identical Jev requests sent again without a cache got the
 same action in 85 % of repeats. Unfavourable results are reported as found in the result reports.
 
+## Research record on the demo
+
+The demo's **research record** view (https://smart-factory.dev/#v3/evidence) serves `data/results/` read-only: per-experiment
+provenance (run dates, code and model versions, calls, cost), a searchable run log with each shift's random events, and the
+files with their checksums. The experiments were run as batches on the researcher's machine with this code; runs started on the
+demo are not stored.
+
 ## Run locally
 
 ```bash

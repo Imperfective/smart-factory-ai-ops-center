@@ -450,3 +450,22 @@ def test_supplement_retest_and_bootstrap_summaries(tmp_path, monkeypatch):
     assert t["action_same_in_all_three"] == 0.0 and t["action_agreement_between_repeats"] == 0.0 and t["cause_agreement_with_original"] == 0.5
     m, lo, hi = S._boot_diff([(1, 1.0), (1, 1.0), (2, 0.0), (3, 0.0)])
     assert m == 0.5 and 0.0 <= lo <= m <= hi <= 1.0
+
+
+def test_research_record_matches_the_published_data_and_stays_inside_it():
+    from fastapi.testclient import TestClient
+    from apps.api.app.main import app
+    from sfaic2.v3 import evidence as E
+    c = TestClient(app)
+    ex = {e["key"]: e for e in c.get("/api/v3/evidence").json()["experiments"]}
+    assert ex["confirmatory"]["runs"] == 2520 and ex["confirmatory"]["pairs"] == 420 and ex["confirmatory"]["real_jev_runs"] == 1260
+    assert ex["confirmatory"]["jev_calls"] == 32226 and ex["confirmatory"]["models"] == ["jev-1.13.0"]
+    assert ex["sensitivity"]["runs"] == 1440 and ex["sensitivity"]["excluded_flagged"] == 8 and ex["sensitivity"]["jev_calls"] == 16907
+    assert ex["retest"]["calls"] == 600 and ex["two_stage"]["parts"] == 4000 and ex["pilot"]["runs"] == 144
+    r = c.get("/api/v3/evidence/runs", params=dict(experiment="confirmatory", arm="R4", load="high")).json()
+    assert r["total"] == 210 and all(x["arm"] == "R4" and x["load"] == "high" for x in r["rows"])
+    assert c.get(f"/api/v3/evidence/runs/{r['rows'][0]['run_uid']}/events").json()
+    assert c.get("/api/v3/evidence/file/confirmatory/paired.csv").status_code == 200
+    for bad in ("../../.env", "%2e%2e/%2e%2e/.env", "/etc/passwd"):
+        assert c.get(f"/api/v3/evidence/file/{bad}").status_code == 404
+    assert E.file_path("../README.md") is None
