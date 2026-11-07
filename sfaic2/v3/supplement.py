@@ -14,6 +14,7 @@ python -m sfaic2.v3.supplement report
 from __future__ import annotations
 
 import json
+import re
 import random
 import sqlite3
 import statistics
@@ -370,13 +371,20 @@ def retest_tables() -> dict:
 ADDED = [("R3r", "R1", "validation + gate, no decision model"), ("R3", "R3r", "decision model inside the gate"), ("R2", "R1", "decision model without the gate"),
          ("R3", "R2", "gate with the decision model"), ("R1s", "R1", "stabilisation wait in the rules"), ("R4", "R1s", "full system vs rules with stabilisation wait"),
          ("R4", "R4r", "decision model vs rules in the full system"), ("R5", "R4r", "planner vs rules in the full system")]
+# one Holm family for every robustness table (main-text Table 9, Table S6): six comparisons per restart assumption and outcome
+ROBUST_PAIRS = [("R4", "R1", "H1"), ("R2", "R1", "H2"), ("R3", "R2", "gate with the decision model"), ("R4", "R3", "H3"), ("R5", "R4", "planner vs decision model"),
+                ("R4", "R1s", "full system vs rules with stabilisation wait")]
+# exploratory subgroup: scenarios whose random events are all equipment events (no event the validation layer or gate checks for)
+EQUIPMENT_EVENTS = {"MAIN_FAULT", "SUB_FAULT", "CT_DRIFT", "DEFECT_RISE"}
+SUBGROUP_PAIRS = [("R4", "R1", "H1"), ("R4", "R1s", "full system vs rules with stabilisation wait"), ("R3r", "R1", "validation + gate, no decision model"),
+                  ("R3", "R2", "gate with the decision model"), ("R4", "R4r", "decision model vs rules in the full system"), ("R5", "R4r", "planner vs rules in the full system")]
 EXTRA_METRICS = ["target_met", "forbidden_allowed", "kwh_per_good", "var_kwh_per_good", "cost_balanced", "overloads", "tripped_min", "factory_kwh_total", "operator_share"]
 
 
 def _enrich(r: dict, m: dict | None = None) -> dict:
     r = dict(r)
     if m:
-        for k in ("tripped_min", "operator_decisions", "decisions", "sub_utilization", "max_kw", "overloads", "unsafe_reasons", "escalations"):
+        for k in ("production_recovery_s", "tripped_min", "operator_decisions", "decisions", "sub_utilization", "max_kw", "overloads", "unsafe_reasons", "escalations"):
             r.setdefault(k, m.get(k))
     g, t = _f(r.get("good_end")), _f(r.get("target"))
     r["var_kwh_per_good"] = ((_f(r.get("factory_kwh_total")) or 0) - (_f(r.get("aux_kwh")) or 0)) / g if g else None
@@ -456,19 +464,29 @@ def added_tables() -> dict:
                                                  ("R4", "R3", "H3")], ["kwh_per_good", "var_kwh_per_good", "factory_kwh_total", "overloads", "tripped_min", "max_kw"]),
                means=mode_means(main, ["target_met", "forbidden_allowed", "kwh_per_good", "var_kwh_per_good", "cost_balanced", "operator_share", "overloads", "tripped_min",
                                        "factory_kwh_total", "max_kw", "sub_utilization", "good_to_target"]))
-    # stabilisation baseline under the restart assumptions (the 60 sensitivity scenarios)
+    # robustness to the restart assumption (the 60 sensitivity scenarios): one Holm family (ROBUST_PAIRS) per value and outcome
     sens_seeds = {int(r["row"]["course_seed"]) for r in _read(RUNS)}
-    sens = []
+    rob, rob_means = [], []
     for v, okey in ((0.0, '{"recurrence_p_unstable": 0.0}'), (0.3, '{"recurrence_p_unstable": 0.3}'), (0.6, "{}")):
         if v == 0.6:
             rows = conf_rows(sens_seeds) + var_rows("ablation", "{}", sens_seeds)
         else:
-            rows = [_enrich(dict(r["row"], decision_provider=r["row"].get("decision_provider") or "NONE"), r["metrics"]) for r in _read(RUNS)
-                    if float(r["value"]) == v and r["row"]["data_quality"] == "ok"] + var_rows("ablation", okey)
-        for x in contrast_family(rows, [("R4", "R1s", "full system vs rules with stabilisation wait"), ("R1s", "R1", "stabilisation wait in the rules"),
-                                        ("R4", "R1", "H1")], ["target_met", "forbidden_allowed", "kwh_per_good"]):
-            sens.append(dict(recurrence_p=v, **x))
-    res["stabilisation_sensitivity"] = sens
+            last = {}
+            for r in _read(RUNS):
+                if float(r["value"]) == v and r["row"]["data_quality"] == "ok":
+                    last[(r["row"]["course_seed"], r["row"]["load"], r["row"]["arm"])] = r
+            rows = [_enrich(dict(r["row"], decision_provider=r["row"].get("decision_provider") or "NONE"), r["metrics"]) for r in last.values()] + var_rows("ablation", okey)
+        rob += [dict(recurrence_p=v, **x) for x in contrast_family(rows, ROBUST_PAIRS, list(SENS_METRICS))]
+        rob_means += [dict(recurrence_p=v, **m) for m in mode_means(rows, ["target_met", "forbidden_allowed", "cost_balanced", "kwh_per_good"]) if m["load"] == "both"]
+    res["robustness"], res["robustness_means"] = rob, rob_means
+    # exploratory subgroup: equipment events only vs at least one other event (scenario × load; events differ between loads)
+    kinds = {(int(float(r["course_seed"])), r["load"]): set(re.split(r"[+,;]", r.get("event_kinds") or "")) - {""} for r in base}
+    equip = {k for k, v in kinds.items() if v and v <= EQUIPMENT_EVENTS}
+    sub = []
+    for g, keep in (("equipment events only", lambda k: k in equip), ("at least one other event", lambda k: k not in equip)):
+        rows = [r for r in main if keep((int(float(r["course_seed"])), r["load"]))]
+        sub += [dict(subgroup=g, **x) for x in contrast_family(rows, SUBGROUP_PAIRS, ["target_met", "forbidden_allowed", "cost_balanced"])]
+    res["equipment_subgroup"] = sub
     # operator answers with the fixed rules instead of the planner
     if (OUT / "operator_runs.jsonl").exists():
         opr = var_rows("operator", '{"operator_policy": "rules"}')
@@ -527,10 +545,12 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
     sens, sens_means, sens_meta = sensitivity_tables()
     rt = retest_tables()
     ad = added_tables()
+    if ad.get("robustness"):                   # Table S6 / main-text Table 9 use one Holm family (ROBUST_PAIRS)
+        sens, sens_means = ad["robustness"], ad["robustness_means"]
     for name, rows in (("decision_model_use.csv", use), ("cause_agreement_by_mode.csv", cause_arm), ("cause_agreement_by_cause.csv", cause_kind),
                        ("transport_by_mode.csv", tr), ("detection_by_disruption.csv", det), ("plan_gain_by_disruption.csv", gain),
                        ("sensitivity_contrasts.csv", sens), ("sensitivity_means.csv", sens_means), ("added_contrasts.csv", ad.get("added", [])), ("electrical_contrasts.csv", ad.get("electrical", [])),
-                       ("added_means.csv", ad.get("means", [])), ("stabilisation_sensitivity.csv", ad.get("stabilisation_sensitivity", [])),
+                       ("added_means.csv", ad.get("means", [])), ("equipment_subgroup.csv", ad.get("equipment_subgroup", [])),
                        ("operator_sensitivity.csv", ad.get("operator", [])), ("interim_extension.csv", ad.get("interim", []))):
         _csv(name, rows)
     summary = dict(generated=time.strftime("%Y-%m-%d %H:%M"), confirmatory_runs=len(runs), decision_model_use=use, cause_agreement=cause_arm, transport=tr,
@@ -548,6 +568,7 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
         if v != v:
             return "—"
         return str(Decimal(repr(v)).quantize(Decimal(1).scaleb(-d), rounding=ROUND_HALF_UP))
+    P = lambda x: "< 0.001" if x is not None and x == x and x < 0.001 else f(x)  # noqa: E731
     L = ["# Supplementary results (generated by `python -m sfaic2.v3.supplement report` — do not edit by hand)", "",
          f"Generated {summary['generated']}. Confirmatory runs read: {len(runs)} (real Jev R2–R4 + rule/planner partners on the same scenarios). "
          "CSV files: `results/v3/supplement/`.", "",
@@ -577,17 +598,24 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
           "| scenarios | contrast | pairs | difference | 95 % CI |", "|---|---|---|---|---|"]
     L += [f"| {g['group']} | {g['contrast']} | {g['pairs']} | {f(g['plan_completion_diff'])} | [{f(g['ci_low'])}, {f(g['ci_high'])}] |" for g in gain]
     if sens_meta:
+        dg = lambda m: 4 if m == "kwh_per_good" else 0 if m in ("cost_balanced", "production_recovery_s") else 3  # noqa: E731
         L += ["", f"## S6 Sensitivity to the repeat-fault probability after an unstable restart (real Jev, {sens_meta['pairs']} pairs)", "",
-              f"{sens_meta['scenarios']} of the confirmatory scenarios × 2 loads, all six modes, re-run with {sens_meta['param']} = "
-              f"{', '.join(str(v) for v in sens_meta['values'])}; the 0.6 rows are the stored confirmatory runs on the same scenarios. "
-              f"New shifts used: {sens_meta['shifts']} ({sens_meta['real_jev_shifts']} with real Jev, {sens_meta['jev_calls']} calls, "
-              f"models {', '.join(sens_meta['models'])}); {sens_meta['flagged']} further real-Jev shifts had an API error that led to a fallback "
-              f"decision, were excluded and re-run (total cost including them ${sens_meta['usd']}). Holm within each probability and metric.", "",
-              "| repeat-fault p | contrast | metric | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|---|"]
-        L += [f"| {s['recurrence_p']} | {s['a']}−{s['b']} | {SENS_METRICS[s['metric']]} | {s['n_pairs']} | {f(s['diff'])} | [{f(s['ci_low'])}, {f(s['ci_high'])}] | {f(s['p_holm'])} |"
-              for s in sorted(sens, key=lambda s: (list(SENS_METRICS).index(s["metric"]), SENS_CONTRASTS.index((s["a"], s["b"])), s["recurrence_p"]))]
-        L += ["", "| repeat-fault p | mode | shifts | plan completion | unsafe / shift | operating loss |", "|---|---|---|---|---|---|"]
-        L += [f"| {m['recurrence_p']} | {m['arm']} | {m['shifts']} | {f(m['plan_completion'])} | {f(m['unsafe_per_shift'], 2)} | {f(m['loss'], 0)} |" for m in sens_means]
+              f"{sens_meta['scenarios']} of the confirmatory scenarios × 2 loads, re-run with {sens_meta['param']} = "
+              f"{', '.join(str(v) for v in sens_meta['values'])}: modes R0–R5 with the real decision model ({sens_meta['shifts']} shifts, {sens_meta['real_jev_shifts']} with "
+              f"real Jev, {sens_meta['jev_calls']} calls, models {', '.join(sens_meta['models'])}) and R1s, R3r, R4r (no API calls); the 0.6 rows are the stored "
+              f"confirmatory runs on the same scenarios. {sens_meta['flagged']} further real-Jev shifts had an API error that led to a fallback decision, were "
+              f"excluded and re-run (total cost including them ${sens_meta['usd']}). 95 % CI from a scenario-clustered bootstrap (2,000, unadjusted); p from a "
+              "scenario-level sign-flip permutation test (10,000), Holm-adjusted within each probability and outcome over the same six comparisons as "
+              "main-text Table 9 (R4−R1, R2−R1, R3−R2, R4−R3, R5−R4, R4−R1s).", "",
+              "| repeat-fault p | contrast | outcome | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|---|"]
+        order = [(a, b) for a, b, _ in ROBUST_PAIRS]
+        L += [f"| {s['recurrence_p']} | {s['a']}−{s['b']} | {SENS_METRICS[s['metric']]} | {s['n_pairs']} | {f(s['diff'], dg(s['metric']))} | "
+              f"[{f(s['ci_low'], dg(s['metric']))}, {f(s['ci_high'], dg(s['metric']))}] | {P(s['p_holm'])} |"
+              for s in sorted(sens, key=lambda s: (list(SENS_METRICS).index(s["metric"]), order.index((s["a"], s["b"])), s["recurrence_p"]))]
+        L += ["", "**Table S6 (continued)** Means per mode in the sensitivity experiment", "",
+              "| repeat-fault p | mode | shifts | plan completion | unsafe / shift | operating loss | kWh / good |", "|---|---|---|---|---|---|---|"]
+        L += [f"| {m['recurrence_p']} | {m['arm']} | {m['shifts']} | {f(m['target_met'])} | {f(m['forbidden_allowed'], 2)} | {f(m['cost_balanced'], 0)} | "
+              f"{f(m['kwh_per_good'], 4)} |" for m in sens_means]
     if rt:
         L += ["", "## S7 Test–retest of the decision model (identical requests sent again with no cache)", "",
               f"{rt['requests']} distinct requests sampled from the sensitivity runs, each sent {rt['repeats']} more times ({rt['calls']} calls, "
@@ -607,7 +635,6 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
         lab = dict(target_met="plan completion", forbidden_allowed="unsafe commands authorized / shift", kwh_per_good="kWh per good part",
                    var_kwh_per_good="kWh per good part without the fixed auxiliary load", cost_balanced="operating loss", overloads="feeder overloads / shift",
                    tripped_min="feeder-trip downtime (min / shift)", factory_kwh_total="factory energy (kWh / shift)", operator_share="share of decisions made by the simulated operator")
-        P = lambda x: "< 0.001" if x is not None and x < 0.001 else f(x)  # noqa: E731
         L += ["", "## S8 Added comparisons: 2 × 2 design and rule baselines (confirmatory scenarios, 420 pairs)", "",
               "R1s = R1 + waiting for the stabilisation diagnostic before a restart; R3r / R4r = R3 / R4 with the fixed rules instead of the decision model "
               "(no API calls). Added after the confirmatory analysis. 95 % CI from a scenario-clustered bootstrap (2,000, unadjusted); p from a "
@@ -631,10 +658,18 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
               "| mode | " + " | ".join(sorted({k for d in ad["unsafe_reasons"].values() for k in d})) + " |", "|---|" + "---|" * len({k for d in ad["unsafe_reasons"].values() for k in d})]
         keys = sorted({k for d in ad["unsafe_reasons"].values() for k in d})
         L += [f"| {a} | " + " | ".join(f(ad["unsafe_reasons"][a].get(k, 0.0), 3) for k in keys) + " |" for a in sorted(ad["unsafe_reasons"], key=lambda a: (a[:2], a))]
-        L += ["", "## S11 Rule baseline with stabilisation wait under the restart assumptions (60 scenarios × 2 loads)", "",
-              "| repeat-fault p | contrast | outcome | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|---|"]
-        L += [f"| {x['recurrence_p']} | {x['a']}−{x['b']} | {lab[x['metric']]} | {x['n_pairs']} | {f(x['diff'], 4 if 'kwh' in x['metric'] else 3)} | "
-              f"[{f(x['ci_low'], 4 if 'kwh' in x['metric'] else 3)}, {f(x['ci_high'], 4 if 'kwh' in x['metric'] else 3)}] | {P(x['p_holm'])} |" for x in ad["stabilisation_sensitivity"]]
+        eq = [x for x in ad.get("equipment_subgroup", [])]
+        npair = {g: max(x["n_pairs"] for x in eq if x["subgroup"] == g) for g in {x["subgroup"] for x in eq}}
+        L += ["", "## S11 Scenarios with equipment events only vs scenarios with at least one other event (confirmatory pairs, exploratory)", "",
+              "Equipment events: main-line fault, backup-line fault, cycle-time drift, defect surge. Other events (network degradation, AMR outage, reduced "
+              "feeder limit, PLC counter anomaly, camera/QR mismatch) are those the validation layer or the gate checks for. Subgroups are scenario × load "
+              f"pairs (the random events differ between loads): {npair.get('equipment events only', 0)} and {npair.get('at least one other event', 0)} pairs. "
+              "95 % CI from a scenario-clustered bootstrap (2,000, unadjusted); p from a scenario-level sign-flip permutation test (10,000), Holm-adjusted "
+              "within each subgroup and outcome over the six contrasts shown.", "",
+              "| subgroup | contrast | outcome | pairs | mean A | mean B | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|---|---|---|"]
+        L += [f"| {x['subgroup']} | {x['a']}−{x['b']} | {lab[x['metric']]} | {x['n_pairs']} | {f(x['mean_a'], 0 if x['metric'] == 'cost_balanced' else 3)} | "
+              f"{f(x['mean_b'], 0 if x['metric'] == 'cost_balanced' else 3)} | {f(x['diff'], 0 if x['metric'] == 'cost_balanced' else 3)} | "
+              f"[{f(x['ci_low'], 0 if x['metric'] == 'cost_balanced' else 3)}, {f(x['ci_high'], 0 if x['metric'] == 'cost_balanced' else 3)}] | {P(x['p_holm'])} |" for x in eq]
         if ad.get("operator"):
             om = ad["operator_meta"]
             L += ["", f"## S12 Simulated operator answering with the fixed rules instead of the planner ({om['pairs']} pairs)", "",
