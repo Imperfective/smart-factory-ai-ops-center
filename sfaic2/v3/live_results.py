@@ -53,6 +53,7 @@ STAT_METRICS = ["target_met", "par", "good_end", "good_to_target", "defects_per_
 PAIRED_METRICS = ["target_met", "cost_balanced", "forbidden_allowed", "kwh_per_good", "defects_per_1000_good", "good_to_target", "defects_shipped",
                   "factory_kwh_total", "transport_errors", "production_recovery_s"]
 GROUP = ["arm", "decision_provider", "unit_judge", "load"]
+STATS_METHOD = "signflip-10000/cluster-boot-2000"     # part of the cache key: a changed method must never reuse old statistics
 
 
 # ------------------------------------------------------------------------------------------------ provenance
@@ -225,8 +226,8 @@ _STATS_CACHE: dict = {}
 
 
 def _key(runs: list[dict]) -> list:
-    """Cache key: run count, newest run, and the metric schema (a changed metric list must never reuse old statistics)."""
-    schema = hashlib.sha256(json.dumps([STAT_METRICS, PAIRED_METRICS, GROUP]).encode()).hexdigest()[:12]
+    """Cache key: run count, newest run, and the metric schema and method (a change must never reuse old statistics)."""
+    schema = hashlib.sha256(json.dumps([STAT_METRICS, PAIRED_METRICS, GROUP, STATS_METHOD]).encode()).hexdigest()[:12]
     return [len(runs), runs[-1]["run_uid"] if runs else None, schema]
 
 
@@ -314,10 +315,11 @@ def pairs_needed(r: dict, alpha: float = 0.05, power: float = 0.8) -> int | None
 
 def paired_contrasts(runs: list[dict]) -> list[dict]:
     """Paper contrasts (stats.CONTRASTS) on identical random courses — same course seed, load, part judge and image share.
-    Seed-cluster bootstrap CI; McNemar exact p for target met, bootstrap p otherwise; Holm across contrasts per metric and provider."""
+    Seed-cluster bootstrap CI; scenario-level sign-flip permutation p for every outcome (McNemar kept as a field for reference);
+    Holm across contrasts per metric and provider."""
     import pandas as pd
     from .control import ARMS
-    from .stats import CONTRASTS, _pairs, boot_p, holm, paired
+    from .stats import CONTRASTS, _pairs, holm, paired, signflip_p
     jev_arm = {a for a, v in ARMS.items() if v.get("chooser") == "jev"}
     if not runs:
         return []
@@ -337,18 +339,12 @@ def paired_contrasts(runs: list[dict]) -> list[dict]:
                 r = paired(d, a, b, m)
                 if r.get("n_pairs", 0) < 2:
                     continue
-                if m == "target_met":
-                    r["p"] = r.get("mcnemar_p")
-                elif m != "forbidden_allowed":
-                    pp = _pairs(d, a, b, m)
-                    pp["d"] = pp["a"] - pp["b"]
-                    r["p"] = boot_p(pp, n=1000)
-                else:
-                    pp = _pairs(d, a, b, m)
-                    pp["d"] = pp["a"] - pp["b"]
+                pp = _pairs(d, a, b, m)
+                pp["d"] = pp["a"] - pp["b"]
+                if m == "forbidden_allowed":
                     sd = pp["d"].std(ddof=1)
                     r.update(mean_a=pp["a"].mean(), mean_b=pp["b"].mean(), mean_diff=pp["d"].mean(), cohens_dz=(pp["d"].mean() / sd) if sd else None)
-                    r["p"] = boot_p(pp, n=1000)
+                r["p"] = signflip_p(pp)             # scenario-level sign-flip permutation test (10,000), all outcomes
                 rows.append(dict(decision_provider=prov, a=a, b=b, hypothesis=label, **{k: _py(v) for k, v in r.items()}))
             ps = [x["p"] for x in rows]
             idx = [i for i, p in enumerate(ps) if p is not None]

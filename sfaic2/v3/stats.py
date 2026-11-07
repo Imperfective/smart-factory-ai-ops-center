@@ -103,6 +103,18 @@ def holm(ps: list[float]) -> list[float]:
     return adj
 
 
+def signflip_p(p: pd.DataFrame, col: str = "d", n: int = 10000, seed: int = 11) -> float:
+    """Two-sided sign-flip permutation test of mean(d) = 0 at the scenario level: the paired differences of one scenario
+    (both loads) are flipped together, so correlated pairs are never treated as independent. Monte Carlo, n permutations."""
+    g = p.groupby("seed")[col].sum().to_numpy(float)
+    if len(g) < 2:
+        return float("nan")
+    obs = abs(g.sum())
+    rng = np.random.default_rng(seed)
+    t = np.abs(rng.choice([-1.0, 1.0], size=(n, len(g))) @ g)
+    return float((np.count_nonzero(t >= obs - 1e-9) + 1) / (n + 1))
+
+
 def boot_p(p: pd.DataFrame, n: int = 2000, seed: int = 7) -> float:
     """Two-sided cluster-bootstrap p-value for mean(d)=0 (sign test of the bootstrap distribution, shifted)."""
     seeds = p["seed"].unique()

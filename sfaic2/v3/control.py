@@ -32,8 +32,14 @@ ARMS: dict[str, dict] = {
 for _n, _d in (("noplan", "plan"), ("noct", "ct"), ("nonet", "network"), ("noelec", "electrical"), ("novisionqr", "vision_qr")):
     ARMS[f"R4-{_n}"] = dict(ARMS["R4"], drop=frozenset({_d}))
 ARMS["R4-basictransport"] = dict(ARMS["R4"], transport="BASIC", adaptive=False)
+# rule-based comparisons added in review (no decision model, no API calls): a reasonable rule baseline that waits for the
+# stabilisation diagnostic before restarting, and R3/R4 with the fixed rules in place of the decision model (2 × 2 design)
+ARMS["R1s"] = dict(BASE, restart_wait=True)
+ARMS["R3r"] = dict(ARMS["R3"], chooser="rule")
+ARMS["R4r"] = dict(ARMS["R4"], chooser="rule")
 ARM_LABEL = {"R0": "Rule + schedule", "R1": "ML detection + deterministic policy", "R2": "R1 + TypeSafe Jev", "R3": "R2 + evidence validation + safety gate",
-             "R4": "R3 + electrical/network context", "R5": "Planner (CP-SAT bound + exhaustive forecast) — reference"}
+             "R4": "R3 + electrical/network context", "R5": "Planner (CP-SAT bound + exhaustive forecast) — reference",
+             "R1s": "R1 + stabilisation wait before restart", "R3r": "R3 with fixed rules instead of the decision model", "R4r": "R4 with fixed rules instead of the decision model"}
 
 
 def rule_policy(ft: dict, allowed: list[str]) -> tuple[str, str]:
@@ -193,6 +199,8 @@ class Controller:
         if self.force_first and not self.forced_done and not operator and now >= self.force_after_s and self.force_first in allowed:
             action, cause, decided_by = self.force_first, "FORCED", "ORACLE_REPLAY"     # replay-oracle: first incident decision forced
             self.forced_done = True
+        elif operator and self.p.f.operator_policy == "rules":
+            action, cause = rule_policy(ft, allowed)                # sensitivity: the simulated operator follows the fixed rules
         elif operator or self.cfg["chooser"] == "planner":
             action, cause = planner_policy(ft, allowed)
         elif self.cfg["chooser"] == "rule":
@@ -263,13 +271,19 @@ class Controller:
         quality_or_drift = any(i["cause"] in ("QUALITY", "PROCESS_DRIFT") for i in ft["incidents"])
         ids: list[str] = []
         self.intent_key = did
+        sub_wait = self.cfg.get("restart_wait") and o["sub"]["plc_state"] == "READY" and not o["sub"]["diag_ok"]
         if action == "SWITCH_TO_SUB":
             if main_prod:
                 ids.append(self._cmd("STOP_MAIN", "main", did, did))
-            ids.append(self._cmd("START_SUB", "sub", did, did))
+            if sub_wait:
+                self._blocked("START_SUB", "sub", did)
+            else:
+                ids.append(self._cmd("START_SUB", "sub", did, did))
             self.intent.update(main="off", sub="run", parallel=False)
         elif action == "RUN_PARALLEL":
-            if not sub_prod:
+            if not sub_prod and sub_wait:
+                self._blocked("START_SUB", "sub", did)
+            elif not sub_prod:
                 ids.append(self._cmd("START_SUB", "sub", did, did))
             if not main_prod and self.maint_needed and o["main"]["plc_state"] in ("IDLE", "OFF"):
                 ids.append(self._cmd("MAINTAIN_MAIN", "main", did, did))   # never restart a line stopped for quality without maintenance
@@ -298,7 +312,7 @@ class Controller:
         st = o["main"]["plc_state"]
         if self.intent["main"] == "recover" and st in ("READY", "IDLE", "OFF"):
             if self.cfg["gate"] == "basic":
-                allowed = True
+                allowed = st != "READY" or bool(o["main"]["diag_ok"]) if self.cfg.get("restart_wait") else True
             else:
                 allowed = (st != "READY" or bool(o["main"]["diag_ok"])) and not o["main"]["stale"] and \
                           (ft["forecast"]["RECOVER_MAIN"]["peak_kw"] if not self.intent["parallel"] else ft["forecast"]["RUN_PARALLEL"]["peak_kw"]) <= ft["limit_kw"] + 1e-6

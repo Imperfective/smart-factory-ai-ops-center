@@ -27,6 +27,12 @@ FILES = {   # source (relative to the repo) -> destination name, what it backs
     "results/v3/supplement/plan_gain_by_disruption.csv": ("supplement/plan_gain_by_disruption.csv", "see the supplement report"),
     "results/v3/supplement/sensitivity_contrasts.csv": ("supplement/sensitivity_contrasts.csv", "see the supplement report"),
     "results/v3/supplement/sensitivity_means.csv": ("supplement/sensitivity_means.csv", "see the supplement report"),
+    "results/v3/supplement/added_contrasts.csv": ("supplement/added_contrasts.csv", "added comparisons: 2 × 2 design and rule baselines (Table 5, Table S8)"),
+    "results/v3/supplement/added_means.csv": ("supplement/added_means.csv", "means per mode incl. R1s, R3r, R4r and electrical outcomes (Tables 4 and 6, Table S9)"),
+    "results/v3/supplement/electrical_contrasts.csv": ("supplement/electrical_contrasts.csv", "electrical outcomes, paired (Table S8b)"),
+    "results/v3/supplement/stabilisation_sensitivity.csv": ("supplement/stabilisation_sensitivity.csv", "rule baseline with stabilisation wait under the restart assumptions (Table 9, Table S11)"),
+    "results/v3/supplement/operator_sensitivity.csv": ("supplement/operator_sensitivity.csv", "simulated operator following the fixed rules (Table S12)"),
+    "results/v3/supplement/interim_extension.csv": ("supplement/interim_extension.csv", "interim analysis and the added 140 pairs (Table S13)"),
     "results/v3/supplement/summary.json": ("supplement/summary.json", "all supplementary results incl. test–retest"),
     "results/v3/real_jev/unit_study/parts.csv": ("two_stage_inspection/parts.csv", "4,000 parts: YOLO output, program posterior, real-Jev and rule dispositions"),
     "results/v3/real_jev/unit_study/summary.json": ("two_stage_inspection/summary.json", "see the supplement report"),
@@ -48,6 +54,23 @@ def sensitivity_runs_csv(dst: Path) -> int:
         w.writeheader()
         for r in rows:
             w.writerow({"param": r["param"], "value": r["value"], **r["row"]})
+    return len(rows)
+
+
+def variant_runs_csv(dst: Path, names: list[str]) -> int:
+    """Flatten the added-experiment runs (R1s/R3r/R4r ablation, operator policy): one row per shift."""
+    rows = []
+    for nm in names:
+        src = ROOT / f"results/v3/supplement/{nm}_runs.jsonl"
+        rows += [json.loads(x) for x in src.read_text(encoding="utf-8").splitlines() if x.strip()]
+    keep = ["seed", "load", "arm", "provider", "target", "good_end", "target_met", "forbidden_allowed", "cost_balanced", "kwh_per_good",
+            "factory_kwh_total", "max_kw", "overloads", "tripped_min", "decisions", "operator_decisions", "jev_calls", "jev_cost_usd", "fallbacks"]
+    with open(dst, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=["experiment", "overrides"] + keep, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            m = r["metrics"] if isinstance(r.get("metrics"), dict) and "arm" in r["metrics"] else r["row"]
+            w.writerow({"experiment": r["name"], "overrides": r.get("overrides_key", "{}"), **{k: m.get(k) for k in keep}})
     return len(rows)
 
 
@@ -80,6 +103,8 @@ def main() -> None:
         lines.append((name, what))
     n = sensitivity_runs_csv(DST / "supplement" / "sensitivity_runs.csv")
     lines.append(("supplement/sensitivity_runs.csv", f"{n} shifts of the sensitivity experiment (repeat-fault probability 0.0 / 0.3)"))
+    n = variant_runs_csv(DST / "supplement" / "added_runs.csv", ["ablation", "operator"])
+    lines.append(("supplement/added_runs.csv", f"{n} shifts of the added experiments (R1s, R3r, R4r; repeat-fault 0.0 / 0.3; operator following the fixed rules)"))
     n = retest_csv(DST / "supplement" / "retest.csv")
     lines.append(("supplement/retest.csv", f"{n} repeated calls of the test-retest experiment: original vs repeated action, cause and needs-a-person probability (request texts not exported)"))
     for name, _ in lines:                                   # nothing secret may leave results/

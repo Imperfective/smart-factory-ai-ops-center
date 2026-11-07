@@ -147,6 +147,7 @@ class FactoryV3(BaseModel):
     network: NetworkSpec = NetworkSpec()
     decision_interval_s: float = 60.0
     human_response_s: float = 600.0
+    operator_policy: str = Field("planner", pattern="^(planner|rules)$", description="how the simulated operator answers an escalation (sensitivity: rules)")
     recurrence_p_unstable: float = Field(RECURRENCE_P_UNSTABLE, ge=0, le=1, description="re-fault probability after a restart inside the stabilisation window")
     ct_scale: float = Field(1.0, gt=0, description="sensitivity multiplier on every line's nominal cycle time")
     simulation_only: bool = True

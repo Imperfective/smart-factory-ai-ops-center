@@ -26,6 +26,8 @@ locally (developed on a MacBook Pro M5, 16 GB).
 
 Operating modes, compared on identical random scenarios: **R0** fixed rules · **R1** ML detection + fixed rules · **R2** + Jev ·
 **R3** + evidence validation and safety gate · **R4** full system (+ power/network context) · **R5** deterministic planner (reference).
+Added after the confirmatory analysis (no API calls): **R1s** R1 + waiting for stabilization before a restart · **R3r** / **R4r** R3 / R4
+with the fixed rules instead of Jev.
 
 ## Main results (simulation, real Jev `jev-1.13.0`)
 
@@ -37,13 +39,20 @@ Operating modes, compared on identical random scenarios: **R0** fixed rules · *
 |---|---|---|---|
 | R4 − R1 | +0.114 [0.083, 0.150], p < 0.001 | −2.53 [−2.84, −2.25] | −0.014 |
 | R2 − R1 | +0.002 [−0.021, 0.031], n.s. | −0.34 [−0.46, −0.23] | −0.003 |
-| R3 − R2 | +0.079 [0.050, 0.110], p < 0.001 | −1.90 [−2.15, −1.66] | −0.009 |
-| R4 − R3 | +0.033 [0.017, 0.052], p = 0.002 | −0.30 [−0.41, −0.21] | −0.002 |
+| R3 − R2 | +0.079 [0.050, 0.110], p < 0.001 | −1.90 [−2.15, −1.65] | −0.009 |
+| R4 − R3 | +0.033 [0.017, 0.052], p = 0.002 | −0.30 [−0.40, −0.20] | −0.002 |
+
+Added comparisons on the same 420 pairs (`data/results/supplement/added_contrasts.csv`): R4 − R1s +0.086 [0.057, 0.114], p < 0.001;
+R3r − R1 (validation and gate with fixed rules) +0.064 [0.033, 0.098], p = 0.002; R3 − R3r +0.017, n.s.; R4 − R4r +0.033
+[0.014, 0.052], p = 0.005 at a higher operating loss. The gain comes mainly from the architecture rather than from Jev, and the
+deterministic planner R5 matches R4 at a lower operating loss. R4 − R1 also cut feeder overloads by two thirds (−0.25 per shift)
+and feeder-trip downtime by 4.9 min per shift (`data/results/supplement/electrical_contrasts.csv`).
 
 Robustness (`docs/v3/RESULTS_supplement.md`, `data/results/supplement/`): with the repeat-fault probability after an unstable restart
 set to 0.0 / 0.3 / 0.6, the R4 − R1 plan-completion gain was +0.033 (n.s.) / +0.067 / +0.117 on the same 120 pairs, while the
 reductions in unsafe commands and kWh per good part held at every value. Identical Jev requests sent again without a cache got the
-same action in 85 % of repeats. Unfavourable results are reported as found in the result reports.
+same action in 85 % of repeats. With the simulated operator following the fixed rules instead of the planner, the conclusions did
+not change (`data/results/supplement/operator_sensitivity.csv`). Unfavourable results are reported as found in the result reports.
 
 ## Research record on the demo
 

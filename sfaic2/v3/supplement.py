@@ -75,16 +75,17 @@ def _metrics_json(uids: list[str]) -> dict:
 
 
 # ------------------------------------------------------------------------------------------------ experiment 1: sensitivity
-def _job(j: dict, budget, cache) -> dict:
+def _job(j: dict, budget=None, cache=None) -> dict:
     from .live import LiveSession
-    ls = LiveSession("RND", j["load"], j["seed"], j["arm"], "typesafe", camera_mode="replay", unit_judge="mock", defect_image_ratio=0.1, headless=True,
-                     source="supplement", autosave=False, jev_budget=budget, jev_cache=cache, sensitivity={j["param"]: j["value"]})
+    sens = j["overrides"] if "overrides" in j else {j["param"]: j["value"]}
+    ls = LiveSession("RND", j["load"], j["seed"], j["arm"], j.get("provider", "typesafe"), camera_mode="replay", unit_judge="mock", defect_image_ratio=0.1, headless=True,
+                     source="supplement", autosave=False, jev_budget=budget, jev_cache=cache, sensitivity=sens)
     ls.control("run_to_end")
     p = LR.collect(ls.result, ls.E, source="supplement", course_seed=j["seed"], unit_judge="mock", camera_mode="replay", defect_image_ratio=0.1,
                    wall_s=time.time() - ls._wall0, energy=ls._energy(), batch_id=j["batch_id"])
     calls = ls.E["ops"].query("SELECT q.sanitized_request_json AS req, r.selected_action, r.per_choice_probabilities, r.cause_class, r.needs_operator_p, r.latency_ms "
                               "FROM jev_requests q JOIN jev_responses r ON r.request_id = q.request_id WHERE r.cached = 0 AND r.error_code IS NULL")
-    rng = random.Random(f"{j['value']}-{j['seed']}-{j['load']}-{j['arm']}")
+    rng = random.Random(f"{j.get('value', json.dumps(j.get('overrides'), sort_keys=True))}-{j['seed']}-{j['load']}-{j['arm']}")
     errs = [r["error_code"] for r in ls.E["ops"].query("SELECT error_code FROM jev_responses WHERE error_code IS NOT NULL")]
     return dict(p=p, calls=rng.sample(calls, min(2, len(calls))), errors=errs)
 
@@ -116,6 +117,50 @@ def sensitivity(values: list[float], n: int, param: str = "recurrence_p_unstable
                 if i % 50 == 49:
                     print(f"  {i + 1}/{len(jobs)} ${cost:.3f}", flush=True)
         print(f"{param}={v}: done, ${cost:.3f}", flush=True)
+
+
+# ------------------------------------------------------------------------------------------------ experiment 3: added comparisons
+def variant(name: str, arms: list[str], n: int, overrides: dict, budget_usd: float = 1.0, workers: int = 6) -> None:
+    """Paired re-run of n confirmatory scenarios × 2 loads for the given modes under plant/operator overrides, stored in
+    results/v3/supplement/{name}_runs.jsonl (never pooled with the confirmatory store). Rule-only modes run in parallel
+    processes without API calls; decision-model modes call the real Jev with one shared budget, as in the main batch."""
+    from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+    from .control import ARMS as MODES
+    path = OUT / f"{name}_runs.jsonl"
+    seeds = sorted(random.Random(20261107).sample(confirmatory_seeds(), n))
+    okey = json.dumps(overrides, sort_keys=True)
+    done = {(r["overrides_key"], r["row"]["course_seed"], r["row"]["load"], r["row"]["arm"]) for r in _read(path) if r["row"]["data_quality"] == "ok"}
+    jev = any(MODES[a]["chooser"] == "jev" for a in arms)
+    jobs = [dict(seed=s, load=l, arm=a, overrides=overrides, provider="typesafe" if jev else "mock", batch_id=f"V{time.strftime('%Y%m%d-%H%M%S')}-{name}")
+            for s in seeds for l in LOADS for a in arms if (okey, s, l, a) not in done]
+    print(f"{name} {okey}: {len(jobs)} runs to do", flush=True)
+    if jev:
+        from sfaic2.adapters.typesafe_jev import JevBudget
+        from .jev import TypeSafeV3Client
+        ok, why = TypeSafeV3Client.opted_in()
+        if not ok:
+            raise SystemExit(f"real Jev unavailable: {why}")
+        budget, cache = JevBudget(10 ** 6, budget_usd), {}
+        ex, futs = ThreadPoolExecutor(4), None
+        futs = [ex.submit(_job, j, budget, cache) for j in jobs]
+    else:
+        ex = ProcessPoolExecutor(workers)
+        futs = [ex.submit(_job, j) for j in jobs]
+    cost = 0.0
+    try:
+        for i, fu in enumerate(as_completed(futs)):
+            out = fu.result()
+            row = out["p"]["row"]
+            row["run_uid"], row["finished_at"] = f"var-{name}-{row['course_seed']}-{row['load']}-{row['arm']}-{time.strftime('%H%M%S')}-{i}", time.strftime("%Y-%m-%d %H:%M:%S")
+            _append(path, dict(name=name, overrides=overrides, overrides_key=okey, row=row, metrics=out["p"]["metrics"], events=out["p"]["events"], jev_errors=out["errors"]))
+            cost += float(row.get("jev_cost_usd") or 0)
+            if i % 100 == 99:
+                print(f"  {i + 1}/{len(jobs)} ${cost:.3f}", flush=True)
+    except BaseException:
+        ex.shutdown(wait=False, cancel_futures=True)       # never leave queued runs calling the API after a failure
+        raise
+    ex.shutdown()
+    print(f"{name} {okey}: done, ${cost:.3f}", flush=True)
 
 
 # ------------------------------------------------------------------------------------------------ experiment 2: test–retest
@@ -321,6 +366,146 @@ def retest_tables() -> dict:
                 latency_ms_p50=_q([r["latency_ms"] for r in ok], 0.5), latency_ms_p95=_q([r["latency_ms"] for r in ok], 0.95))
 
 
+# ------------------------------------------------------------------------------------------------ added comparisons (analysis)
+ADDED = [("R3r", "R1", "validation + gate, no decision model"), ("R3", "R3r", "decision model inside the gate"), ("R2", "R1", "decision model without the gate"),
+         ("R3", "R2", "gate with the decision model"), ("R1s", "R1", "stabilisation wait in the rules"), ("R4", "R1s", "full system vs rules with stabilisation wait"),
+         ("R4", "R4r", "decision model vs rules in the full system"), ("R5", "R4r", "planner vs rules in the full system")]
+EXTRA_METRICS = ["target_met", "forbidden_allowed", "kwh_per_good", "var_kwh_per_good", "cost_balanced", "overloads", "tripped_min", "factory_kwh_total", "operator_share"]
+
+
+def _enrich(r: dict, m: dict | None = None) -> dict:
+    r = dict(r)
+    if m:
+        for k in ("tripped_min", "operator_decisions", "decisions", "sub_utilization", "max_kw", "overloads", "unsafe_reasons", "escalations"):
+            r.setdefault(k, m.get(k))
+    g, t = _f(r.get("good_end")), _f(r.get("target"))
+    r["var_kwh_per_good"] = ((_f(r.get("factory_kwh_total")) or 0) - (_f(r.get("aux_kwh")) or 0)) / g if g else None
+    r["good_to_target"] = g / t if g is not None and t else None
+    d = _f(r.get("decisions"))
+    r["operator_share"] = (_f(r.get("operator_decisions")) or 0) / d if d else None
+    return r
+
+
+def _f(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def conf_rows(seeds: set | None = None) -> list[dict]:
+    runs = confirmatory_runs(seeds)
+    mj = _metrics_json([r["run_uid"] for r in runs])
+    return [_enrich(r, mj[r["run_uid"]]) for r in runs]
+
+
+def var_rows(name: str, okey: str = "{}", seeds: set | None = None) -> list[dict]:
+    last = {}
+    for r in _read(OUT / f"{name}_runs.jsonl"):
+        x = r["row"]
+        if r["overrides_key"] == okey and x["data_quality"] == "ok" and (seeds is None or int(x["course_seed"]) in seeds):
+            x = dict(x, decision_provider=x.get("decision_provider") or "NONE")
+            last[(x["course_seed"], x["load"], x["arm"])] = _enrich(x, r["metrics"])
+    return list(last.values())
+
+
+def contrast_family(rows: list[dict], pairs: list[tuple], metrics: list[str]) -> list[dict]:
+    """Paired contrasts on identical scenario × load: cluster-bootstrap 95 % CI (2,000, unadjusted) and scenario-level
+    sign-flip permutation p (10,000), Holm within each metric over the listed contrasts."""
+    import pandas as pd
+    from .stats import _pairs, cluster_boot, holm, signflip_p
+    df = pd.DataFrame([dict(scenario="RND", load=r["load"], seed=int(float(r["course_seed"])), arm=r["arm"], **{m: _f(r.get(m)) for m in metrics}) for r in rows])
+    df = df.drop_duplicates(["load", "seed", "arm"], keep="last")
+    out = []
+    for m in metrics:
+        fam = []
+        for a, b, label in pairs:
+            if not ({a, b} <= set(df.arm)):
+                continue
+            pp = _pairs(df, a, b, m)
+            if len(pp) < 2:
+                continue
+            pp["d"] = pp["a"] - pp["b"]
+            lo, hi = cluster_boot(pp)
+            fam.append(dict(a=a, b=b, label=label, metric=m, n_pairs=len(pp), mean_a=pp["a"].mean(), mean_b=pp["b"].mean(), diff=pp["d"].mean(), ci_low=lo, ci_high=hi, p=signflip_p(pp)))
+        for x, h in zip(fam, holm([x["p"] for x in fam]) if fam else []):
+            x["p_holm"] = h
+        out += fam
+    return out
+
+
+def mode_means(rows: list[dict], keys: list[str]) -> list[dict]:
+    out = []
+    for arm in sorted({r["arm"] for r in rows}, key=lambda a: (a[:2], a)):
+        for load in ("medium", "high", None):
+            xs = [r for r in rows if r["arm"] == arm and (load is None or r["load"] == load)]
+            if xs:
+                out.append(dict(arm=arm, load=load or "both", shifts=len(xs), **{k: statistics.mean(_f(x.get(k)) or 0 for x in xs) for k in keys}))
+    return out
+
+
+def added_tables() -> dict:
+    """2 × 2 and rule-baseline comparisons (420 pairs), the stabilisation baseline under the restart assumptions (120 pairs),
+    the operator sensitivity (120 pairs), electrical outcomes and the interim / extension split of the confirmatory sample."""
+    if not (OUT / "ablation_runs.jsonl").exists():
+        return {}
+    base = conf_rows()
+    main = base + var_rows("ablation")
+    res = dict(added=contrast_family(main, ADDED, EXTRA_METRICS[:-1] + ["operator_share"]),
+               electrical=contrast_family(main, [("R4", "R1", "H1"), ("R4", "R1s", "full system vs rules with stabilisation wait"), ("R3", "R2", "gate with the decision model"),
+                                                 ("R4", "R3", "H3")], ["kwh_per_good", "var_kwh_per_good", "factory_kwh_total", "overloads", "tripped_min", "max_kw"]),
+               means=mode_means(main, ["target_met", "forbidden_allowed", "kwh_per_good", "var_kwh_per_good", "cost_balanced", "operator_share", "overloads", "tripped_min",
+                                       "factory_kwh_total", "max_kw", "sub_utilization", "good_to_target"]))
+    # stabilisation baseline under the restart assumptions (the 60 sensitivity scenarios)
+    sens_seeds = {int(r["row"]["course_seed"]) for r in _read(RUNS)}
+    sens = []
+    for v, okey in ((0.0, '{"recurrence_p_unstable": 0.0}'), (0.3, '{"recurrence_p_unstable": 0.3}'), (0.6, "{}")):
+        if v == 0.6:
+            rows = conf_rows(sens_seeds) + var_rows("ablation", "{}", sens_seeds)
+        else:
+            rows = [_enrich(dict(r["row"], decision_provider=r["row"].get("decision_provider") or "NONE"), r["metrics"]) for r in _read(RUNS)
+                    if float(r["value"]) == v and r["row"]["data_quality"] == "ok"] + var_rows("ablation", okey)
+        for x in contrast_family(rows, [("R4", "R1s", "full system vs rules with stabilisation wait"), ("R1s", "R1", "stabilisation wait in the rules"),
+                                        ("R4", "R1", "H1")], ["target_met", "forbidden_allowed", "kwh_per_good"]):
+            sens.append(dict(recurrence_p=v, **x))
+    res["stabilisation_sensitivity"] = sens
+    # operator answers with the fixed rules instead of the planner
+    if (OUT / "operator_runs.jsonl").exists():
+        opr = var_rows("operator", '{"operator_policy": "rules"}')
+        op_seeds = {int(float(r["course_seed"])) for r in opr}
+        planner = conf_rows(op_seeds) + var_rows("ablation", "{}", op_seeds)
+        pairs = [("R4", "R1", "H1"), ("R2", "R1", "H2"), ("R3", "R2", "gate with the decision model"), ("R4", "R3", "H3"), ("R3", "R3r", "decision model inside the gate"),
+                 ("R4", "R4r", "decision model vs rules in the full system")]
+        res["operator"] = [dict(operator="planner", **x) for x in contrast_family(planner, pairs, ["target_met", "forbidden_allowed", "cost_balanced"])] + \
+                          [dict(operator="rules", **x) for x in contrast_family(opr, pairs, ["target_met", "forbidden_allowed", "cost_balanced"])]
+        res["operator_means"] = [dict(operator="planner", **m) for m in mode_means(planner, ["target_met", "operator_share", "forbidden_allowed"]) if m["load"] == "both"] + \
+                                [dict(operator="rules", **m) for m in mode_means(opr, ["target_met", "operator_share", "forbidden_allowed"]) if m["load"] == "both"]
+        real = [r for r in opr if r["decision_provider"] == "TYPESAFE_JEV"]
+        res["operator_meta"] = dict(pairs=len({(r["course_seed"], r["load"]) for r in opr}), shifts=len(opr), real_jev_shifts=len(real),
+                                    jev_calls=int(sum(_f(r.get("jev_calls")) or 0 for r in real)), usd=round(sum(_f(r.get("jev_cost_usd")) or 0 for r in real), 3),
+                                    models=sorted({m for r in real for m in (r.get("jev_model") or "").split(",") if m}))
+    # interim (first 280 pairs) and extension (last 140 pairs) of the confirmatory sample, by real-Jev batch
+    by_batch: dict[str, set] = {}
+    for r in base:
+        if r["decision_provider"] == "TYPESAFE_JEV":
+            by_batch.setdefault(r["batch_id"], set()).add(int(float(r["course_seed"])))
+    order = sorted(by_batch)
+    if len(order) >= 2:
+        ext = by_batch[order[-1]]
+        first = set().union(*(by_batch[b] for b in order[:-1]))
+        res["interim"] = [dict(part="first", **x) for x in contrast_family([r for r in base if int(float(r["course_seed"])) in first], [(a, b, l) for a, b, l in
+                          [("R2", "R1", "H2"), ("R4", "R3", "H3"), ("R4", "R1", "H1"), ("R3", "R2", "R3-R2"), ("R5", "R4", "R5-R4")]], ["target_met"])] + \
+                         [dict(part="extension", **x) for x in contrast_family([r for r in base if int(float(r["course_seed"])) in ext], [("R4", "R3", "H3")], ["target_met"])]
+    unsafe = {}
+    for r in main:
+        for k, v in json.loads(r.get("unsafe_reasons") or "{}").items():
+            unsafe.setdefault(r["arm"], {}).setdefault(k, 0)
+            unsafe[r["arm"]][k] += v
+    n_arm = {a: sum(1 for r in main if r["arm"] == a) for a in unsafe}
+    res["unsafe_reasons"] = {a: {k: v / n_arm[a] for k, v in d.items()} for a, d in unsafe.items()}
+    return res
+
+
 def _csv(name: str, rows: list[dict]) -> None:
     import csv
     if not rows:
@@ -341,12 +526,16 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
     det, gain = by_disruption(runs)
     sens, sens_means, sens_meta = sensitivity_tables()
     rt = retest_tables()
+    ad = added_tables()
     for name, rows in (("decision_model_use.csv", use), ("cause_agreement_by_mode.csv", cause_arm), ("cause_agreement_by_cause.csv", cause_kind),
                        ("transport_by_mode.csv", tr), ("detection_by_disruption.csv", det), ("plan_gain_by_disruption.csv", gain),
-                       ("sensitivity_contrasts.csv", sens), ("sensitivity_means.csv", sens_means)):
+                       ("sensitivity_contrasts.csv", sens), ("sensitivity_means.csv", sens_means), ("added_contrasts.csv", ad.get("added", [])), ("electrical_contrasts.csv", ad.get("electrical", [])),
+                       ("added_means.csv", ad.get("means", [])), ("stabilisation_sensitivity.csv", ad.get("stabilisation_sensitivity", [])),
+                       ("operator_sensitivity.csv", ad.get("operator", [])), ("interim_extension.csv", ad.get("interim", []))):
         _csv(name, rows)
     summary = dict(generated=time.strftime("%Y-%m-%d %H:%M"), confirmatory_runs=len(runs), decision_model_use=use, cause_agreement=cause_arm, transport=tr,
-                   sensitivity=dict(meta=sens_meta, contrasts=sens, means=sens_means), retest=rt)
+                   sensitivity=dict(meta=sens_meta, contrasts=sens, means=sens_means), retest=rt,
+                   added={k: v for k, v in ad.items()})
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1, default=str), encoding="utf-8")
 
     def f(v, d=3):                     # half-up rounding of the exact value (x.5 rounds away from zero)
@@ -355,6 +544,9 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
         if not isinstance(v, float):
             return str(v)
         from decimal import ROUND_HALF_UP, Decimal
+        v = float(v)                   # numpy floats: repr is "np.float64(...)"
+        if v != v:
+            return "—"
         return str(Decimal(repr(v)).quantize(Decimal(1).scaleb(-d), rounding=ROUND_HALF_UP))
     L = ["# Supplementary results (generated by `python -m sfaic2.v3.supplement report` — do not edit by hand)", "",
          f"Generated {summary['generated']}. Confirmatory runs read: {len(runs)} (real Jev R2–R4 + rule/planner partners on the same scenarios). "
@@ -411,6 +603,51 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
               f"| same action, original top-two margin ≥ 0.2 (n = {rt['agreement_high_margin']['n']}) | {f(rt['agreement_high_margin']['rate'])} |",
               f"| call latency p50 / p95 (ms) | {f(rt['latency_ms_p50'], 0)} / {f(rt['latency_ms_p95'], 0)} |"]
         L += [f"| same action as the original, {a} requests (n = {v['n']}) | {f(v['action_agreement'])} |" for a, v in rt["per_arm"].items()]
+    if ad:
+        lab = dict(target_met="plan completion", forbidden_allowed="unsafe commands authorized / shift", kwh_per_good="kWh per good part",
+                   var_kwh_per_good="kWh per good part without the fixed auxiliary load", cost_balanced="operating loss", overloads="feeder overloads / shift",
+                   tripped_min="feeder-trip downtime (min / shift)", factory_kwh_total="factory energy (kWh / shift)", operator_share="share of decisions made by the simulated operator")
+        P = lambda x: "< 0.001" if x is not None and x < 0.001 else f(x)  # noqa: E731
+        L += ["", "## S8 Added comparisons: 2 × 2 design and rule baselines (confirmatory scenarios, 420 pairs)", "",
+              "R1s = R1 + waiting for the stabilisation diagnostic before a restart; R3r / R4r = R3 / R4 with the fixed rules instead of the decision model "
+              "(no API calls). Added after the confirmatory analysis. 95 % CI from a scenario-clustered bootstrap (2,000, unadjusted); p from a "
+              "scenario-level sign-flip permutation test (10,000), Holm-adjusted within each outcome over the contrasts listed.", "",
+              "| contrast | outcome | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|"]
+        L += [f"| {x['a']}−{x['b']} ({x['label']}) | {lab[x['metric']]} | {x['n_pairs']} | {f(x['diff'], 4 if 'kwh' in x['metric'] else 3)} | "
+              f"[{f(x['ci_low'], 4 if 'kwh' in x['metric'] else 3)}, {f(x['ci_high'], 4 if 'kwh' in x['metric'] else 3)}] | {P(x['p_holm'])} |" for x in ad["added"]]
+        L += ["", "## S8b Electrical outcomes, paired (420 pairs; Holm within each outcome over these four contrasts)", "",
+              "| contrast | outcome | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|"]
+        L += [f"| {x['a']}−{x['b']} ({x['label']}) | {lab.get(x['metric'], 'peak load (kW)')} | {x['n_pairs']} | {f(x['diff'], 4 if 'kwh_per' in x['metric'] else 2)} | "
+              f"[{f(x['ci_low'], 4 if 'kwh_per' in x['metric'] else 2)}, {f(x['ci_high'], 4 if 'kwh_per' in x['metric'] else 2)}] | {P(x['p_holm'])} |" for x in ad["electrical"]]
+        L += ["", "## S9 Means per mode incl. the added comparisons and electrical outcomes (420 shifts per mode, both loads)", "",
+              "| mode | plan completion | unsafe / shift | operator share | kWh / good | kWh / good w/o aux | factory kWh / shift | peak kW | overloads / shift | trip downtime (min) | output / target | backup-line use |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+        L += [f"| {m['arm']} | {f(m['target_met'])} | {f(m['forbidden_allowed'], 2)} | {f(m['operator_share'])} | {f(m['kwh_per_good'], 4)} | {f(m['var_kwh_per_good'], 4)} | "
+              f"{f(m['factory_kwh_total'], 1)} | {f(m['max_kw'], 1)} | {f(m['overloads'], 3)} | {f(m['tripped_min'], 2)} | {f(m['good_to_target'])} | {f(m['sub_utilization'])} |"
+              for m in ad["means"] if m["load"] == "both"]
+        L += ["", "| mode | load | plan completion | backup-line use | output / target |", "|---|---|---|---|---|"]
+        L += [f"| {m['arm']} | {m['load']} | {f(m['target_met'])} | {f(m['sub_utilization'])} | {f(m['good_to_target'])} |" for m in ad["means"] if m["load"] != "both"]
+        L += ["", "## S10 Unsafe commands authorized per shift, by reason (ground-truth oracle)", "",
+              "| mode | " + " | ".join(sorted({k for d in ad["unsafe_reasons"].values() for k in d})) + " |", "|---|" + "---|" * len({k for d in ad["unsafe_reasons"].values() for k in d})]
+        keys = sorted({k for d in ad["unsafe_reasons"].values() for k in d})
+        L += [f"| {a} | " + " | ".join(f(ad["unsafe_reasons"][a].get(k, 0.0), 3) for k in keys) + " |" for a in sorted(ad["unsafe_reasons"], key=lambda a: (a[:2], a))]
+        L += ["", "## S11 Rule baseline with stabilisation wait under the restart assumptions (60 scenarios × 2 loads)", "",
+              "| repeat-fault p | contrast | outcome | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|---|"]
+        L += [f"| {x['recurrence_p']} | {x['a']}−{x['b']} | {lab[x['metric']]} | {x['n_pairs']} | {f(x['diff'], 4 if 'kwh' in x['metric'] else 3)} | "
+              f"[{f(x['ci_low'], 4 if 'kwh' in x['metric'] else 3)}, {f(x['ci_high'], 4 if 'kwh' in x['metric'] else 3)}] | {P(x['p_holm'])} |" for x in ad["stabilisation_sensitivity"]]
+        if ad.get("operator"):
+            om = ad["operator_meta"]
+            L += ["", f"## S12 Simulated operator answering with the fixed rules instead of the planner ({om['pairs']} pairs)", "",
+                  f"Same 60 scenarios as the sensitivity experiment; new shifts {om['shifts']} ({om['real_jev_shifts']} with real Jev, {om['jev_calls']} calls, ${om['usd']}, "
+                  f"models {', '.join(om['models'])}). 'planner' rows are the stored runs of the same scenarios.", "",
+                  "| operator | contrast | outcome | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|---|"]
+            L += [f"| {x['operator']} | {x['a']}−{x['b']} | {lab[x['metric']]} | {x['n_pairs']} | {f(x['diff'])} | [{f(x['ci_low'])}, {f(x['ci_high'])}] | {P(x['p_holm'])} |" for x in ad["operator"]]
+            L += ["", "| operator | mode | shifts | plan completion | operator share | unsafe / shift |", "|---|---|---|---|---|---|"]
+            L += [f"| {m['operator']} | {m['arm']} | {m['shifts']} | {f(m['target_met'])} | {f(m['operator_share'])} | {f(m['forbidden_allowed'], 2)} |" for m in ad["operator_means"]]
+        if ad.get("interim"):
+            L += ["", "## S13 Interim analysis (first 280 pairs) and the added 140 pairs, plan completion", "",
+                  "| sample | contrast | pairs | difference | 95 % CI | p (Holm within the sample) |", "|---|---|---|---|---|---|"]
+            L += [f"| {x['part']} | {x['a']}−{x['b']} | {x['n_pairs']} | {f(x['diff'])} | [{f(x['ci_low'])}, {f(x['ci_high'])}] | {P(x['p_holm'])} |" for x in ad["interim"]]
     md.write_text("\n".join(L) + "\n", encoding="utf-8")
     return summary
 
@@ -420,7 +657,10 @@ def main():
     from dotenv import load_dotenv
     load_dotenv(Path(".env"), override=False)
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["sensitivity", "retest", "report"])
+    ap.add_argument("cmd", choices=["sensitivity", "retest", "variant", "report"])
+    ap.add_argument("--name", default="ablation")
+    ap.add_argument("--arms", default="R1s,R3r,R4r")
+    ap.add_argument("--set", default="", help="overrides, e.g. recurrence_p_unstable=0.3,operator_policy=rules")
     ap.add_argument("--values", default="0.0,0.3")
     ap.add_argument("--param", default="recurrence_p_unstable")
     ap.add_argument("--n", type=int, default=60)
@@ -431,6 +671,16 @@ def main():
     a = ap.parse_args()
     if a.cmd == "sensitivity":
         sensitivity([float(v) for v in a.values.split(",")], a.n, a.param, a.budget, a.workers)
+    elif a.cmd == "variant":
+        ov = {}
+        for kv in filter(None, a.set.split(",")):
+            k, v = kv.split("=", 1)
+            try:
+                ov[k] = float(v)
+            except ValueError:
+                ov[k] = v
+        variant(a.name, a.arms.split(","), a.n, ov, a.budget, a.workers)
+        return
     elif a.cmd == "retest":
         retest(a.k, a.repeats, a.budget)
     print(json.dumps({k: v for k, v in report().items() if k in ("confirmatory_runs", "retest")}, default=str)[:1500])
