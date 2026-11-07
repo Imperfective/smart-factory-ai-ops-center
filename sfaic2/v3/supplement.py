@@ -371,7 +371,7 @@ def retest_tables() -> dict:
 ADDED = [("R3r", "R1", "validation + gate, no decision model"), ("R3", "R3r", "decision model inside the gate"), ("R2", "R1", "decision model without the gate"),
          ("R3", "R2", "gate with the decision model"), ("R1s", "R1", "stabilisation wait in the rules"), ("R4", "R1s", "full system vs rules with stabilisation wait"),
          ("R4", "R4r", "decision model vs rules in the full system"), ("R5", "R4r", "planner vs rules in the full system")]
-# one Holm family for every robustness table (main-text Table 9, Table S6): six comparisons per restart assumption and outcome
+# one Holm family for every robustness table (main-text Table 8, Table S6): six comparisons per restart assumption and outcome
 ROBUST_PAIRS = [("R4", "R1", "H1"), ("R2", "R1", "H2"), ("R3", "R2", "gate with the decision model"), ("R4", "R3", "H3"), ("R5", "R4", "planner vs decision model"),
                 ("R4", "R1s", "full system vs rules with stabilisation wait")]
 # exploratory subgroup: scenarios whose random events are all equipment events (no event the validation layer or gate checks for)
@@ -545,7 +545,7 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
     sens, sens_means, sens_meta = sensitivity_tables()
     rt = retest_tables()
     ad = added_tables()
-    if ad.get("robustness"):                   # Table S6 / main-text Table 9 use one Holm family (ROBUST_PAIRS)
+    if ad.get("robustness"):                   # Table S6 / main-text Table 8 use one Holm family (ROBUST_PAIRS)
         sens, sens_means = ad["robustness"], ad["robustness_means"]
     for name, rows in (("decision_model_use.csv", use), ("cause_agreement_by_mode.csv", cause_arm), ("cause_agreement_by_cause.csv", cause_kind),
                        ("transport_by_mode.csv", tr), ("detection_by_disruption.csv", det), ("plan_gain_by_disruption.csv", gain),
@@ -606,7 +606,7 @@ def report(md: Path = Path("docs/v3/RESULTS_supplement.md")) -> dict:
               f"confirmatory runs on the same scenarios. {sens_meta['flagged']} further real-Jev shifts had an API error that led to a fallback decision, were "
               f"excluded and re-run (total cost including them ${sens_meta['usd']}). 95 % CI from a scenario-clustered bootstrap (2,000, unadjusted); p from a "
               "scenario-level sign-flip permutation test (10,000), Holm-adjusted within each probability and outcome over the same six comparisons as "
-              "main-text Table 9 (R4−R1, R2−R1, R3−R2, R4−R3, R5−R4, R4−R1s).", "",
+              "main-text Table 8 (R4−R1, R2−R1, R3−R2, R4−R3, R5−R4, R4−R1s).", "",
               "| repeat-fault p | contrast | outcome | pairs | difference | 95 % CI | p (Holm) |", "|---|---|---|---|---|---|---|"]
         order = [(a, b) for a, b, _ in ROBUST_PAIRS]
         L += [f"| {s['recurrence_p']} | {s['a']}−{s['b']} | {SENS_METRICS[s['metric']]} | {s['n_pairs']} | {f(s['diff'], dg(s['metric']))} | "
