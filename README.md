@@ -78,4 +78,8 @@ The camera input replays verbatim YOLO11n output on public MVTec AD images. To r
 * Rules, mock Jev and real Jev results are never pooled; a real-Jev run with any API error or fallback is kept but excluded.
 * The API key stays in the local `.env`; it is never written to results, logs or the UI.
 
-Data licences: see `LICENSE_NOTICE.md` (MVTec AD CC BY-NC-SA 4.0, AI4I 2020 CC BY 4.0, Ultralytics YOLO11 AGPL-3.0).
+## License
+
+Code, documentation and the simulation results in `data/results/` are released under the **MIT License** (`LICENSE`), except
+`data/results/vision/`, which is derived from MVTec AD and stays under **CC BY-NC-SA 4.0** (non-commercial). Third-party data and
+libraries keep their own licences: MVTec AD CC BY-NC-SA 4.0, AI4I 2020 CC BY 4.0, Ultralytics YOLO11 AGPL-3.0 (see `LICENSE_NOTICE.md`).
