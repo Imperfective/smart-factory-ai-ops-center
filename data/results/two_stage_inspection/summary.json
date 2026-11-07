@@ -1,0 +1,140 @@
+{
+  "pipeline": [
+    {
+      "ratio": 0.1,
+      "parts": 2000,
+      "defective": 207,
+      "stage1_flagged": 144,
+      "stage1_accuracy": 0.9685,
+      "final_accept": 1856,
+      "final_reject": 75,
+      "final_reinspect": 69,
+      "automation_rate": 0.9655,
+      "escaped": 63,
+      "scrapped_good": 0,
+      "reinspect_found_defects": 69,
+      "final_accuracy": 0.9685,
+      "loss_per_100": 85.65,
+      "loss_per_run": 342.6,
+      "loss_per_run_ci": [
+        229.2,
+        454.9
+      ],
+      "hidden_defects_after_stage1": 63,
+      "hidden_defects_caught_by_stage2": 0
+    },
+    {
+      "ratio": 0.3,
+      "parts": 2000,
+      "defective": 584,
+      "stage1_flagged": 425,
+      "stage1_accuracy": 0.9205,
+      "final_accept": 685,
+      "final_reject": 395,
+      "final_reinspect": 920,
+      "automation_rate": 0.54,
+      "escaped": 63,
+      "scrapped_good": 0,
+      "reinspect_found_defects": 126,
+      "final_accuracy": 0.9685,
+      "loss_per_100": 170.75,
+      "loss_per_run": 683.0,
+      "loss_per_run_ci": [
+        606.0,
+        771.2
+      ],
+      "hidden_defects_after_stage1": 159,
+      "hidden_defects_caught_by_stage2": 96
+    }
+  ],
+  "flows": [
+    {
+      "ratio": 0.1,
+      "stage1": "DEFECT_BOX",
+      "final": "REINSPECT",
+      "parts": 69,
+      "truly_defective": 69
+    },
+    {
+      "ratio": 0.1,
+      "stage1": "DEFECT_BOX",
+      "final": "REJECT",
+      "parts": 75,
+      "truly_defective": 75
+    },
+    {
+      "ratio": 0.1,
+      "stage1": "NO_BOX",
+      "final": "ACCEPT",
+      "parts": 1856,
+      "truly_defective": 63
+    },
+    {
+      "ratio": 0.3,
+      "stage1": "DEFECT_BOX",
+      "final": "REINSPECT",
+      "parts": 30,
+      "truly_defective": 30
+    },
+    {
+      "ratio": 0.3,
+      "stage1": "DEFECT_BOX",
+      "final": "REJECT",
+      "parts": 395,
+      "truly_defective": 395
+    },
+    {
+      "ratio": 0.3,
+      "stage1": "NO_BOX",
+      "final": "ACCEPT",
+      "parts": 685,
+      "truly_defective": 63
+    },
+    {
+      "ratio": 0.3,
+      "stage1": "NO_BOX",
+      "final": "REINSPECT",
+      "parts": 890,
+      "truly_defective": 96
+    }
+  ],
+  "reference_rules_loss_per_100": {
+    "0.1": {
+      "YOLO_RULE": 78.75,
+      "COST_RULE": 89.15,
+      "JEV": 85.65
+    },
+    "0.3": {
+      "YOLO_RULE": 198.75,
+      "COST_RULE": 171.45,
+      "JEV": 170.75
+    }
+  },
+  "reference_note": "fixed rules on the same evidence, context only (not the subject of the study)",
+  "provider": "TYPESAFE_JEV",
+  "parts": 4000,
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "ratios": [
+    0.1,
+    0.3
+  ],
+  "n_per_run": 400,
+  "camera": "live",
+  "jev_calls": 723,
+  "jev_cached": 3277,
+  "jev_errors": 0,
+  "wall_s": 106.5,
+  "jev_latency_p50_ms": 286.03108297102153,
+  "cost_basis": {
+    "defect_shipped": 25.0,
+    "good_scrapped": 10.0,
+    "reinspection": 2.0
+  },
+  "note": "truth labels are used only for scoring; the judges see the YOLO result, program-computed defect probability and expected costs"
+}

@@ -1,0 +1,18 @@
+/* =========================================================
+   Works Design System — Elevation + Motion
+   Cards are flat by default; hairline shadow only when active/focused.
+   ========================================================= */
+
+:root {
+  /* Elevation */
+  --shadow-card:    1px 2px 3px 0 rgba(0,0,0,0.10);   /* weakest levitate */
+  --shadow-popover: 0 4px 12px 0 rgba(0,0,0,0.08);
+  --shadow-sheet:   0 -4px 16px 0 rgba(0,0,0,0.12);   /* bottom sheet */
+
+  /* Motion — no bounce/spring; fades over slides */
+  --ease-standard:   cubic-bezier(0.2, 0, 0, 1);   /* @kind other */
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);   /* @kind other */
+  --duration-fast: 150ms;   /* @kind other */
+  --duration-base: 220ms;   /* @kind other */
+  --duration-slow: 320ms;   /* @kind other */
+}

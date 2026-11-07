@@ -1,0 +1,75 @@
+/* =========================================================
+   Works Design System — Color tokens
+   Brand · gray scale · surface · text · outline · status · sub
+   ========================================================= */
+
+:root {
+  /* Brand — Deep Teal (primary) */
+  --color-primary-100:   #004F59;   /* deep teal — primary CTA, active nav, brand */
+  --color-primary-200:   #003640;   /* darker teal — pressed / hover-darken */
+  --color-primary-50:    #D3E6E8;   /* pastel teal — chips, light surface */
+
+  /* Brand — Warm Orange (secondary, low frequency) */
+  --color-secondary-100: #F47D30;   /* orange accent — from logo */
+  --color-secondary-200: #E46D20;   /* darker orange / hover */
+  --color-secondary-50:  #FFE5D3;   /* tint */
+
+  /* Tertiary — Purple (hyperlinks, secondary accents) */
+  --color-tertiary-100:  #6436EA;
+  --color-tertiary-50:   #F0EBFD;
+
+  /* Amber — warning text alt / domain category */
+  --color-amber-100:     #B8531A;
+  --color-amber-50:      rgba(180,83,26,0.12);
+
+  /* Gray scale (Tailwind-aligned, from Figma) */
+  --color-gray-900:      #101828;   /* darkest text */
+  --color-gray-800:      #222222;   /* primary text */
+  --color-gray-700:      #344053;
+  --color-gray-600:      #4A5565;
+  --color-gray-500:      #565656;   /* most-used neutral */
+  --color-gray-400:      #666666;   /* secondary text */
+  --color-gray-300:      #979797;
+  --color-gray-200:      #A4A4A4;
+  --color-gray-100:      #D9D9D9;
+  --color-gray-50:       #E5E7EB;
+  --color-gray-25:       #F5F5F5;
+
+  /* Surface / Background */
+  --color-bg-0:          #FFFFFF;   /* cards, modals */
+  --color-bg-1:          #F9F9F9;   /* page background */
+  --color-bg-2:          #F5F7F8;   /* hover surface */
+  --color-bg-canvas:     #F7F8F9;   /* shell body canvas — floats white blocks. No pure-white page bg */
+  --color-header:        #262626;   /* dark header bar */
+  --color-canvas-dark:   #171717;   /* dark canvas (design system page bg) */
+  --color-surface-100:   #E0E0E0;
+  --color-surface-200:   #DDDADA;
+
+  /* Text */
+  --color-text-primary:   #222222;
+  --color-text-secondary: #666666;
+  --color-text-disabled:  #A0A0A0;
+  --color-text-on-dark:   #FFFFFF;
+
+  /* Outline / Divider */
+  --color-outline-100:    rgba(34,34,34,0.24);
+  --color-outline-200:    rgba(34,34,34,0.16);
+  --color-outline-300:    rgba(34,34,34,0.08);
+  --color-divider:        #E0E0E0;
+
+  /* Status */
+  --color-success:        #00A969;
+  --color-warning:        #FBC53C;
+  --color-error:          #DC3545;
+  --color-info:           #17A2B8;
+
+  /* Sub (illustrative / category) */
+  --color-sub-green:      #9BDFC4;
+  --color-sub-yellow:     #FFB44F;
+  --color-sub-blue:       #62B2FD;
+  --color-sub-pink:       #F99BAB;
+
+  /* Semi / dim layers */
+  --color-dim:            rgba(0,0,0,0.34);   /* bottom-sheet dim */
+  --color-overlay-hover:  rgba(34,34,34,0.04);
+}

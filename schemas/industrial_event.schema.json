@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IndustrialEvent",
+  "type": "object",
+  "required": [
+    "event_id",
+    "run_id",
+    "sim_time_s",
+    "asset_id",
+    "source_type",
+    "signal",
+    "value",
+    "quality"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "sim_time_s": {
+      "type": "number",
+      "minimum": 0
+    },
+    "asset_id": {
+      "type": "string"
+    },
+    "source_type": {
+      "enum": [
+        "SIMULATED",
+        "OBSERVED_PUBLIC",
+        "DERIVED"
+      ]
+    },
+    "signal": {
+      "type": "string"
+    },
+    "value": {},
+    "unit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "quality": {
+      "enum": [
+        "VALID",
+        "STALE",
+        "MISSING",
+        "CONFLICTED",
+        "QUESTIONABLE"
+      ]
+    },
+    "source_timestamp": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "received_timestamp": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "evidence_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "provenance": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

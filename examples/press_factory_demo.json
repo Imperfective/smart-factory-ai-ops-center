@@ -1,0 +1,53 @@
+{
+  "scenario_id": "press_shop_demo_v1",
+  "source_type": "SIMULATED",
+  "simulation": {
+    "duration_s": 900,
+    "seed": 42
+  },
+  "production_plan": {
+    "product_id": "PART_A",
+    "quantity": 1000,
+    "shift_duration_s": 28800
+  },
+  "machines": [
+    {
+      "machine_id": "PRESS_01",
+      "cycle_time_s": 45.0,
+      "run_kw": 23.0,
+      "idle_kw": 3.0,
+      "site": "PRESS_LINE"
+    },
+    {
+      "machine_id": "PRESS_02",
+      "cycle_time_s": 50.0,
+      "run_kw": 22.0,
+      "idle_kw": 2.5,
+      "site": "PRESS_LINE"
+    }
+  ],
+  "faults": [
+    {
+      "fault_id": "fault_thermal_001",
+      "at_s": 250,
+      "duration_s": 120,
+      "fault_type": "SIMULATED_STOP",
+      "machine_id": "PRESS_01"
+    }
+  ],
+  "network": {
+    "median_latency_ms": 50,
+    "jitter_ms": 10,
+    "loss_probability": 0.01,
+    "virtual_only": true
+  },
+  "electrical": {
+    "name": "DEMO_400V_LV_BUS",
+    "load_model": "SYNTHETIC_EXAMPLE_NOT_MEASURED"
+  },
+  "provenance": {
+    "dataset_id": null,
+    "label_source": "SIMULATED_SCENARIO",
+    "notice": "Not measured in a physical plant"
+  }
+}

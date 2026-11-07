@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FactoryScenario",
+  "type": "object",
+  "required": [
+    "scenario_id",
+    "source_type",
+    "simulation",
+    "production_plan",
+    "machines",
+    "faults"
+  ],
+  "properties": {
+    "scenario_id": {
+      "type": "string"
+    },
+    "source_type": {
+      "const": "SIMULATED"
+    },
+    "simulation": {
+      "type": "object",
+      "required": [
+        "duration_s",
+        "seed"
+      ],
+      "properties": {
+        "duration_s": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "type": "integer"
+        }
+      }
+    },
+    "production_plan": {
+      "type": "object",
+      "required": [
+        "product_id",
+        "quantity",
+        "shift_duration_s"
+      ],
+      "properties": {
+        "product_id": {
+          "type": "string"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shift_duration_s": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "machines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "machine_id",
+          "cycle_time_s",
+          "run_kw",
+          "idle_kw"
+        ],
+        "properties": {
+          "machine_id": {
+            "type": "string"
+          },
+          "cycle_time_s": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "run_kw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "idle_kw": {
+            "type": "number",
+            "minimum": 0
+          },
+          "site": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fault_id",
+          "at_s",
+          "duration_s",
+          "fault_type",
+          "machine_id"
+        ],
+        "properties": {
+          "fault_id": {
+            "type": "string"
+          },
+          "at_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "duration_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fault_type": {
+            "type": "string"
+          },
+          "machine_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "network": {
+      "type": "object"
+    },
+    "electrical": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

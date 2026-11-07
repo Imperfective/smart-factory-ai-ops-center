@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DecisionEnvelope",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "run_id",
+    "provider",
+    "recommendation",
+    "safety_gate_status"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "provider": {
+      "enum": [
+        "RULES",
+        "ML",
+        "TYPESAFE_JEV",
+        "MOCK_JEV"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "CONTINUE_MONITORING",
+        "REQUEST_RECHECK",
+        "REQUEST_OPERATOR_REVIEW",
+        "REQUEST_SIMULATED_STOP"
+      ]
+    },
+    "risk_band": {
+      "enum": [
+        "LOW",
+        "MODERATE",
+        "HIGH",
+        "CRITICAL",
+        "UNKNOWN"
+      ]
+    },
+    "causes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "model_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "safety_gate_status": {
+      "enum": [
+        "NOT_REQUESTED",
+        "REJECTED",
+        "PENDING_APPROVAL",
+        "APPROVED",
+        "EXECUTED_VIRTUAL_ONLY"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,76 @@
+{
+  "dataset_id": "MVTEC_AD",
+  "categories": [
+    "metal_nut",
+    "screw",
+    "cable"
+  ],
+  "protocol": "supervised split of the MVTec AD test set (70/30 per category\u00d7defect_type) + extra train/good backgrounds; NOT the unsupervised benchmark protocol",
+  "n_images": 129,
+  "n_defect": 93,
+  "n_good": 36,
+  "image_level": {
+    "TP": 70,
+    "FP": 0,
+    "FN": 23,
+    "TN": 36,
+    "precision": 1.0,
+    "recall": 0.7527,
+    "accuracy": 0.8217,
+    "f1": 0.8589,
+    "conf_threshold": 0.25
+  },
+  "per_category": {
+    "metal_nut": {
+      "TP": 26,
+      "FN": 3,
+      "TN": 7,
+      "recall": 0.8966
+    },
+    "screw": {
+      "TN": 12,
+      "FN": 12,
+      "TP": 24,
+      "recall": 0.6667
+    },
+    "cable": {
+      "TP": 20,
+      "FN": 8,
+      "TN": 17,
+      "recall": 0.7143
+    }
+  },
+  "box_metrics": {
+    "mAP50": 0.526,
+    "mAP50_95": 0.3192,
+    "precision": 0.7128,
+    "recall": 0.4832
+  },
+  "train": {
+    "best": "results/vision/train/yolo11n_mvtec/weights/best.pt",
+    "best_sha256": "a3509ff84b175f13454d5195ff7a898f5e165b129582e281a45fd7cf381fa6ed",
+    "imgsz": 640,
+    "device": "mps",
+    "box_metrics": {
+      "mAP50": 0.526,
+      "mAP50_95": 0.3192,
+      "precision": 0.7128,
+      "recall": 0.4832
+    },
+    "base": "yolo11n.pt",
+    "epochs": 30,
+    "batch": 8,
+    "seed": 42,
+    "train_s": 35408.3
+  },
+  "weights": "results/vision/train/yolo11n_mvtec/weights/best.pt",
+  "weights_sha256": "a3509ff84b175f13454d5195ff7a898f5e165b129582e281a45fd7cf381fa6ed",
+  "device": "mps",
+  "torch": "2.14.1",
+  "ultralytics": "8.4.175",
+  "median_ms": 16.8,
+  "p95_ms": 27.7,
+  "licence": "MVTec AD \u2014 CC BY-NC-SA 4.0 (non-commercial research only); Bergmann, Fauser, Sattlegger, Steger: MVTec AD \u2014 A Comprehensive Real-World Dataset for Unsupervised Anomaly Detection, CVPR 2019; IJCV 2021",
+  "source": "https://huggingface.co/datasets/foersben/mvtec-ad",
+  "role": "perception layer (limbs): detects surface/assembly defects on parts at the camera gate and emits DERIVED vision_part_presence events to PLC \u2192 MQTT \u2192 JEV; makes no supervisory decision"
+}

@@ -1,0 +1,59 @@
+/* =========================================================
+   MS WORKS — Shell Sidebar 추가 스타일
+   ---------------------------------------------------------
+   기존 shell.css / shell-desktop.css 의 .sidebar / .nav-link /
+   .nav-sub-link 위에 얹는다. 섹션 헤더와 V2 배지만 신규.
+   ========================================================= */
+
+/* 섹션 헤더 (업무 / 생활 / 개인 / 운영 / 시스템) */
+.sidebar .nav-section-header {
+  padding: 16px 16px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-text-disabled);
+  text-transform: none;
+  user-select: none;
+}
+/* 첫 번째 섹션 헤더는 위쪽 패딩 줄임 (사이드바 자체가 이미 padding 가짐) */
+.sidebar .nav-group > .nav-section-header:first-child {
+  padding-top: 4px;
+}
+/* 섹션 헤더 바로 위에는 얇은 디바이더 — 첫 헤더 제외 */
+.sidebar .nav-group > .nav-section-header + * { /* no-op spacer */ }
+.sidebar .nav-group > .nav-link + .nav-section-header,
+.sidebar .nav-group > .nav-sub + .nav-section-header {
+  margin-top: 6px;
+}
+
+/* collapsed 상태에선 섹션 헤더 숨김 */
+.sidebar.is-collapsed .nav-section-header { display: none; }
+
+/* ── V2 (준비 중) 메뉴 ─────────────────────────────────
+   톤다운 + 우측 'V2' 작은 배지. 클릭은 가능하나 작동 안 함 표기.
+─────────────────────────────────────────────────────── */
+.nav-link.is-v2 {
+  opacity: 0.55;
+  cursor: default;
+}
+.nav-link.is-v2:hover {
+  background: transparent;
+}
+.nav-link-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border-radius: 4px;
+  background: var(--color-bg-2);
+  border: 1px solid var(--color-gray-50);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-gray-600);
+  flex-shrink: 0;
+}
+
+/* chevron — SVG 사용으로 변경. 기존 ▾ 텍스트 대응 잔여 스타일은 그대로 작동 */
+.nav-link-chevron svg { display: block; }

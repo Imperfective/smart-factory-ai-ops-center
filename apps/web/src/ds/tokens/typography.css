@@ -1,0 +1,51 @@
+/* =========================================================
+   Works Design System — Typography tokens + semantic type classes
+   Red Hat Display (Latin display) × Pretendard Variable (KO/body/UI/num)
+   ========================================================= */
+
+:root {
+  /* Families */
+  --font-display: "Red Hat Display", "Pretendard Variable", system-ui, sans-serif; /* Latin display · KO falls back to Pretendard */
+  --font-body:    "Pretendard Variable", system-ui, sans-serif;
+  --font-mono:    "Pretendard Variable", system-ui, sans-serif; /* numeric — tnum aligns tables */
+  --font-en:      "Red Hat Display", "Pretendard Variable", system-ui, sans-serif; /* English headlines · wordmark */
+  --font-num:     "Pretendard Variable", system-ui, sans-serif; /* numbers — Pretendard for ₩/KO adjacency */
+
+  /* Type scale (Figma "01-Typography") */
+  --type-display-1:  72px;
+  --type-display-2:  64px;
+  --type-display-3:  40px;
+  --type-h1:         32px;
+  --type-h2:         24px;
+  --type-h3:         20px;
+  --type-title-1:    18px;
+  --type-title-2:    16px;
+  --type-body-1:     14px;
+  --type-body-2:     13px;
+  --type-button:     14px;
+  --type-caption:    11px;
+  --type-tiny:       12px;
+
+  /* Line-height */
+  --leading-tight:   100%;
+  --leading-snug:    120%;
+  --leading-normal:  140%;
+  --leading-relaxed: 1.5;
+
+  /* Korean tracking — Pretendard reads tighter */
+  --tracking-ko:    -0.020em;
+  --tracking-ko-px: -0.2px;
+}
+
+/* ── Semantic type classes ─────────────────────────────── */
+.h-display { font-family: var(--font-display); font-weight: 300; font-size: var(--type-display-1); line-height: var(--leading-tight); letter-spacing: 0; color: var(--color-text-on-dark); }
+.h1 { font-family: var(--font-body); font-weight: 700; font-size: var(--type-h1); line-height: var(--leading-tight); color: var(--color-text-primary); }
+.h2 { font-family: var(--font-body); font-weight: 700; font-size: var(--type-h2); line-height: var(--leading-snug); color: var(--color-text-primary); }
+.h3 { font-family: var(--font-body); font-weight: 600; font-size: var(--type-h3); line-height: 24px; color: var(--color-text-primary); }
+.title-1 { font-family: var(--font-body); font-weight: 600; font-size: var(--type-title-1); line-height: 24px; letter-spacing: var(--tracking-ko-px); color: var(--color-text-primary); }
+.title-2 { font-family: var(--font-body); font-weight: 700; font-size: var(--type-title-2); line-height: 24px; letter-spacing: var(--tracking-ko-px); color: var(--color-text-primary); }
+.body-1 { font-family: var(--font-body); font-weight: 400; font-size: var(--type-body-1); line-height: 20px; letter-spacing: var(--tracking-ko-px); color: var(--color-text-primary); }
+.body-2 { font-family: var(--font-body); font-weight: 400; font-size: var(--type-body-2); line-height: 18px; letter-spacing: var(--tracking-ko-px); color: var(--color-text-primary); }
+.button-text { font-family: var(--font-body); font-weight: 600; font-size: var(--type-button); line-height: 20px; letter-spacing: var(--tracking-ko); }
+.caption { font-family: var(--font-body); font-weight: 400; font-size: var(--type-caption); line-height: 16px; letter-spacing: var(--tracking-ko-px); color: var(--color-text-secondary); }
+.numeric { font-family: var(--font-num); font-weight: 700; font-feature-settings: "tnum" 1; color: var(--color-text-primary); }
