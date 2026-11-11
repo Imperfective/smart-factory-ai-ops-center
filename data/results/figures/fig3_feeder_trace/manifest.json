@@ -1,0 +1,94 @@
+{
+ "purpose": "Fig. 3 of the article: one shift of the confirmatory experiment re-executed to show the live-headroom gate; the re-executed runs reproduce the stored rows exactly (see stored_match)",
+ "runner": "sfaic2.v3.live.LiveSession(camera_mode='replay', unit_judge='mock', defect_image_ratio=0.1) \u2014 the same path as the stored batches",
+ "scenario": "RND",
+ "seed": 66315,
+ "load": "medium",
+ "arms": [
+  "R1",
+  "R4r"
+ ],
+ "provider": "mock (no decision-model calls; both arms are rule-based)",
+ "created": "2026-11-11T11:34:07+0900",
+ "git_commit": "aa8e5c21276404e1da7887f8e9f65638fe73318e",
+ "summary": {
+  "R1": {
+   "scenario": "RND",
+   "load": "medium",
+   "seed": 66315,
+   "arm": "R1",
+   "provider": "NONE",
+   "n_truth_events": 2,
+   "target": 792,
+   "good_end": 828,
+   "target_met": 1,
+   "overloads": 1,
+   "max_kw": 51.0,
+   "tripped_min": 20.0,
+   "energy_kwh": 245.95,
+   "cost_balanced": 698.75
+  },
+  "R4r": {
+   "scenario": "RND",
+   "load": "medium",
+   "seed": 66315,
+   "arm": "R4r",
+   "provider": "NONE",
+   "n_truth_events": 2,
+   "target": 792,
+   "good_end": 824,
+   "target_met": 1,
+   "overloads": 0,
+   "max_kw": 31.9,
+   "tripped_min": 0.0,
+   "energy_kwh": 240.98,
+   "cost_balanced": 617.75
+  }
+ },
+ "stored_match": {
+  "R1": {
+   "stored_file": "data/results/confirmatory/runs.csv",
+   "found": true,
+   "identical": true,
+   "differences": {},
+   "compared": [
+    "target",
+    "good_end",
+    "target_met",
+    "overloads",
+    "max_kw",
+    "energy_kwh",
+    "cost_balanced"
+   ]
+  },
+  "R4r": {
+   "stored_file": "data/results/supplement/added_runs.csv",
+   "found": true,
+   "identical": true,
+   "differences": {},
+   "compared": [
+    "target",
+    "good_end",
+    "target_met",
+    "overloads",
+    "max_kw",
+    "tripped_min",
+    "cost_balanced"
+   ]
+  }
+ },
+ "files": {
+  "R1": [
+   "R1_electrical.csv",
+   "R1_line_states.csv",
+   "R1_decisions.csv",
+   "R1_trips.csv"
+  ],
+  "R4r": [
+   "R4r_electrical.csv",
+   "R4r_line_states.csv",
+   "R4r_decisions.csv",
+   "R4r_trips.csv"
+  ]
+ }
+}
